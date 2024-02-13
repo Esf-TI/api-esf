@@ -8,10 +8,18 @@ const photo = multer({
     limits: 10 * 1024 * 1024,
 }).single('photo')
 
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 10 * 1024 * 1024 // Limite de 10MB por arquivo
+    }
+}).array('files', 6);
+
+const uploadProjects = require('../middlewares/uploadsProjects');
 const uploadImage = require('../middlewares/storageUpload');
 const verificarToken = require('../middlewares/verifyToken');
 
-router.post('/createProject',verificarToken, photo, uploadImage, ProjetcsControllers.createProject);
+router.post('/createProject',verificarToken, upload, uploadProjects, ProjetcsControllers.createProject);
 
 router.get('/projects',verificarToken, ProjetcsControllers.returnProjects);
 

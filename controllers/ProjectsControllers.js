@@ -2,25 +2,29 @@ const connection = require('../connection');
 const BUCKET = 'engenharia-sem-fronteira.appspot.com'
 
 const createProject = (req, res) => {
-    const { titulo, descricao, nucleoResponsavel, area } = req.body;
-    const uploads = req.file;
+    const { Nome, NucleoResponsavel, Area, descricao, PessoasImpactadas, DataFundacao, Cidade, fotoCapa, foto1, foto2, foto3, foto4, foto5 } = req.body;
+    const uploads = req.files;
 
     // Verificar se todos os campos obrigatórios estão presentes
-    if (!titulo || !descricao || !nucleoResponsavel || !uploads || !area) {
+    if (!Nome || !descricao || !NucleoResponsavel || !uploads || !PessoasImpactadas || !DataFundacao || !Cidade || !fotoCapa || !foto1) {
         res.status(400).send('Todos os campos são obrigatórios');
         return;
     }
 
-    // Assegurar que a imagem foi enviada corretamente
-    if (!uploads || !uploads.filename) {
-        res.status(400).send('Imagem não foi enviada corretamente');
-        return;
-    }
+    const processedImages = {};
+    const promises = Object.keys(uploads).map(async (key) => {
+        const upload = uploads[key];
+        if (!upload || !upload.filename) {
+            return Promise.reject(`A imagem ${key} não foi enviada corretamente`);
+        }
+        // Aqui você processa a imagem e a armazena onde for necessário
+        const imageUrl = `https://storage.googleapis.com/${BUCKET}/${upload.filename}`;
+        processedImages[key] = imageUrl;
+    });
 
-    const image = `https://storage.googleapis.com/${BUCKET}/${uploads.filename}`;
 
-    const sql = 'INSERT INTO projetos (titulo, descricao, nucleoResponsavel, image, area) VALUES (?, ?, ?, ?,?)';
-    connection.query(sql, [titulo, descricao, nucleoResponsavel, image, area], (error, results, fields) => {
+    const sql = 'INSERT INTO projetos (Nome, NucleoResponsavel, Descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa, foto1, foto2, foto3, foto4, foto5) VALUES (?, ?, ?, ?,?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    connection.query(sql, [Nome, NucleoResponsavel, descricao,Area, PessoasImpactadas, DataFundacao, Cidade, processedImages.fotoCapa, processedImages.foto1, processedImages.foto2, processedImages.foto3, processedImages.foto4, processedImages.foto5], (error, results, fields) => {
 
         if (error) {
             console.error('Erro ao criar Projeto: ' + error.message);

@@ -1,4 +1,5 @@
 const connection = require('../connection');
+const BUCKET = 'engenharia-sem-fronteira.appspot.com'
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
@@ -6,19 +7,28 @@ require('dotenv').config();
 const tokenSecret = process.env.JWT_SECRET;
 
 const CreateNucleo = async (req, res) => {
-  const { nome, email, senha, cidade, descricao } = req.body;
-  console.log(nome, email, senha, cidade)
+  const { email, senha, nomeNucleo, descricao, cidade, dataFundacao, fotoCapa, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram} = req.body;
+  console.log(email, senha, nomeNucleo, descricao, cidade, dataFundacao, fotoCapa, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram)
+  const upload = req.file
   // Verificação se todos os campos estão preenchidos
-  if (!nome || !email || !senha || !cidade || !descricao) {
+  if (!email || !senha || !nomeNucleo || !descricao || !cidade || !dataFundacao || !fotoCapa || !linkDoacao || !linkSite || !linkLinkedin || !linkFacebook || !linkInstagram) {
     return res.status(400).send('Por favor, preencha todos os campos');
   }
+
+  // Assegurar que a imagem foi enviada corretamente
+  if (!upload || !upload.filename) {
+    res.status(400).send('Imagem não foi enviada corretamente');
+    return;
+}
+
+const image = `https://storage.googleapis.com/${BUCKET}/${upload.filename}`;
 
   try {
     // Geração do hash da senha
     const hashedPassword = await bcrypt.hash(senha, 10); // O segundo argumento é o "salt rounds"
 
-    const inserirNucleo = 'INSERT INTO Nucleo (Nome, Email, Senha, Cidade, Descricao) VALUES (?, ?, ?, ?, ?)';
-    connection.query(inserirNucleo, [nome, email, hashedPassword, cidade, descricao], async (err, result) => {
+    const inserirNucleo = 'INSERT INTO Nucleo (Nome, Email, Senha, Cidade, Descricao, DataFundacao, fotoCapa, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    connection.query(inserirNucleo, [nomeNucleo, email, hashedPassword, cidade, descricao, dataFundacao, image, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram  ], async (err, result) => {
       if (err) {
         console.log(err);
         if (err.code === 'ER_DUP_ENTRY') {
@@ -85,6 +95,44 @@ const LoginNucleo = async (req, res) => {
   }
 };
 
+const GetAllNucleos = async (req, res) => {
+  try {
+    const buscarTodosNucleos = 'SELECT * FROM Nucleo';
+    connection.query(buscarTodosNucleos, async (err, results) => {
+      if (err) {
+        console.log(err);
+        return res.status(500).send('Erro ao buscar os núcleos');
+      }
+      return res.status(200).json(results);
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).send('Erro ao buscar os núcleos');
+  }
+};
 
-module.exports = { CreateNucleo,LoginNucleo }
+const GetNucleoById = async (req, res) => {
+  const nucleoId = req.params.id;
+
+  try {
+    const buscarNucleoPorId = 'SELECT * FROM Nucleo WHERE ID = ?';
+    connection.query(buscarNucleoPorId, [nucleoId], async (err, results) => {
+      if (err) {
+        console.log(err);
+        return res.status(500).send('Erro ao buscar o núcleo');
+      }
+
+      if (results.length === 0) {
+        return res.status(404).send('Núcleo não encontrado');
+      }
+
+      return res.status(200).json(results[0]);
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).send('Erro ao buscar o núcleo');
+  }
+};
+
+module.exports = { CreateNucleo,LoginNucleo, GetAllNucleos, GetNucleoById }
 
