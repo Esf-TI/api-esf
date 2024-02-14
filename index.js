@@ -17,7 +17,7 @@ const NucleosRoutes = require('../backend/routes/NucleosRoutes');
 const ProjectsRoutes = require('../backend/routes/ProjectsRoutes');
 
 app.use('/nucleos', NucleosRoutes);
-app.use('/projects', ProjectsRoutes);
+app.use('/projetos', ProjectsRoutes);
 
 
 app.listen(3000, () => {

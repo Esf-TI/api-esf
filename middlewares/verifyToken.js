@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const tokenSecret = process.env.JWT_SECRET;
+const tokenSecret = 'chaveSecretaToken';
 const verificarToken = (req, res, next) => {
 
     // Obter o token do cabeçalho Authorization

@@ -45,7 +45,8 @@ connection.connect((err) => {
                 linkSite VARCHAR(255),
                 linkLinkedin VARCHAR(255),
                 linkFacebook VARCHAR(255),
-                linkInstagram VARCHAR(255)
+                linkInstagram VARCHAR(255),
+                Token VARCHAR(255)
             )`, (err, result) => {
                 if (err) {
                     console.error('Erro ao criar a tabela Nucleo: ' + err.stack);
@@ -69,6 +70,7 @@ connection.connect((err) => {
                     foto3 VARCHAR(255),
                     foto4 VARCHAR(255),
                     foto5 VARCHAR(255),
+                    status VARCHAR(255),
                     FOREIGN KEY (NucleoResponsavel) REFERENCES Nucleo(ID)
                 )`, (err, result) => {
                     if (err) {

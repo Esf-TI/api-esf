@@ -2,29 +2,40 @@ const connection = require('../connection');
 const BUCKET = 'engenharia-sem-fronteira.appspot.com'
 
 const createProject = (req, res) => {
-    const { Nome, NucleoResponsavel, Area, descricao, PessoasImpactadas, DataFundacao, Cidade, fotoCapa, foto1, foto2, foto3, foto4, foto5 } = req.body;
+    const { Nome, NucleoResponsavel, Area, descricao, PessoasImpactadas, DataFundacao, Cidade } = req.body;
     const uploads = req.files;
 
     // Verificar se todos os campos obrigatórios estão presentes
-    if (!Nome || !descricao || !NucleoResponsavel || !uploads || !PessoasImpactadas || !DataFundacao || !Cidade || !fotoCapa || !foto1) {
+    if (!Nome || !descricao || !NucleoResponsavel || !uploads || !PessoasImpactadas || !DataFundacao || !Cidade) {
         res.status(400).send('Todos os campos são obrigatórios');
         return;
     }
 
-    const processedImages = {};
-    const promises = Object.keys(uploads).map(async (key) => {
-        const upload = uploads[key];
-        if (!upload || !upload.filename) {
-            return Promise.reject(`A imagem ${key} não foi enviada corretamente`);
-        }
-        // Aqui você processa a imagem e a armazena onde for necessário
-        const imageUrl = `https://storage.googleapis.com/${BUCKET}/${upload.filename}`;
-        processedImages[key] = imageUrl;
-    });
+    const fotoCapa = `https://storage.googleapis.com/${BUCKET}/${uploads.fotoCapa.filename}`;
 
+    const fotos = uploads.foto.map((upload, index) => {
+        // Construir o URL da imagem usando o nome do arquivo
+        return `https://storage.googleapis.com/${BUCKET}/${upload.filename}`;
+    });
+    
+
+    const fotosNumeradas = {
+        foto1: null,
+        foto2: null,
+        foto3: null,
+        foto4: null,
+        foto5: null
+    };
+
+    fotos.slice(0, 5).forEach((foto, index) => {
+        fotosNumeradas[`foto${index + 1}`] = foto;
+    });
+    
+    // Extrair os valores dos URLs das fotos numeradas
+    const valoresFotosNumeradas = Object.values(fotosNumeradas);
 
     const sql = 'INSERT INTO projetos (Nome, NucleoResponsavel, Descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa, foto1, foto2, foto3, foto4, foto5) VALUES (?, ?, ?, ?,?, ?, ?, ?, ?, ?, ?, ?, ?)';
-    connection.query(sql, [Nome, NucleoResponsavel, descricao,Area, PessoasImpactadas, DataFundacao, Cidade, processedImages.fotoCapa, processedImages.foto1, processedImages.foto2, processedImages.foto3, processedImages.foto4, processedImages.foto5], (error, results, fields) => {
+    connection.query(sql, [Nome, NucleoResponsavel, descricao,Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa, ...valoresFotosNumeradas], (error, results, fields) => {
 
         if (error) {
             console.error('Erro ao criar Projeto: ' + error.message);
@@ -50,15 +61,15 @@ const returnProjects = (req, res) => {
 
         // Organizando os projetos por área
         results.forEach((projeto) => {
-            const { area, Titulo, Image, Id, Descricao, NucleoResponsavel } = projeto;
+            const { Area, Nome, fotoCapa, Id, Descricao, NucleoResponsavel } = projeto;
 
-            if (!projetosPorArea[area]) {
-                projetosPorArea[area] = [];
+            if (!projetosPorArea[Area]) {
+                projetosPorArea[Area] = [];
             }
 
-            projetosPorArea[area].push({
-                Titulo,
-                Image,
+            projetosPorArea[Area].push({
+                Nome,
+                fotoCapa,
                 Id,
                 Descricao,
                 NucleoResponsavel
@@ -98,40 +109,103 @@ const returnProjectById = (req, res) => {
 
 //editar um projeto
 const editProjectById = (req, res) => {
-    const projectId = req.params.id;
-    const { titulo, descricao, nucleoResponsavel } = req.body;
-    let image = null;
+    const projectId = req.params.id; // Obtenha o ID do projeto a ser editado
+    const { Nome, NucleoResponsavel, Area, descricao, PessoasImpactadas, DataFundacao, Cidade } = req.body;
+    const uploads = req.files;
 
-    if (req.file) {
-        const uploads = req.file;
-        image = `https://storage.googleapis.com/${BUCKET}/${uploads.filename}`;
+    // Verificar se todos os campos obrigatórios estão presentes
+    if (!projectId || !Nome || !descricao || !NucleoResponsavel || !uploads || !PessoasImpactadas || !DataFundacao || !Cidade) {
+        res.status(400).send('Todos os campos são obrigatórios');
+        return;
     }
 
-    let sql;
-    let params;
-
-    if (image) {
-        sql = 'UPDATE projetos SET titulo = ?, descricao = ?, nucleoResponsavel = ?, image = ? WHERE id = ?';
-        params = [titulo, descricao, nucleoResponsavel, image, projectId];
-    } else {
-        sql = 'UPDATE projetos SET titulo = ?, descricao = ?, nucleoResponsavel = ? WHERE id = ?';
-        params = [titulo, descricao, nucleoResponsavel, projectId];
-    }
-
-    connection.query(sql, params, (error, results, fields) => {
+    // Verificar se o projeto com o ID fornecido existe no banco de dados
+    const checkProjectQuery = 'SELECT * FROM projetos WHERE ID = ?';
+    connection.query(checkProjectQuery, [projectId], (error, results) => {
         if (error) {
-            console.error('Erro ao editar o projeto: ' + error.message);
-            res.status(500).send('Erro ao editar o projeto');
+            console.error('Erro ao verificar projeto: ' + error.message);
+            res.status(500).send('Erro ao verificar projeto');
             return;
         }
 
-        if (results.affectedRows === 0) {
+        // Verificar se o projeto com o ID fornecido foi encontrado
+        if (results.length === 0) {
             res.status(404).send('Projeto não encontrado');
             return;
         }
 
-        console.log('Projeto editado com sucesso!');
-        res.status(200).send('Projeto editado com sucesso!');
+        // Atualizar o projeto com os novos dados
+        const fotoCapa = `https://storage.googleapis.com/${BUCKET}/${uploads.fotoCapa.filename}`;
+        const fotos = uploads.foto.map(upload => `https://storage.googleapis.com/${BUCKET}/${upload.filename}`);
+
+        const fotosNumeradas = {
+            foto1: null,
+            foto2: null,
+            foto3: null,
+            foto4: null,
+            foto5: null
+        };
+
+        fotos.slice(0, 5).forEach((foto, index) => {
+            fotosNumeradas[`foto${index + 1}`] = foto;
+        });
+
+        // Extrair os valores dos URLs das fotos numeradas
+        const valoresFotosNumeradas = Object.values(fotosNumeradas);
+
+        // Atualizar os dados do projeto no banco de dados
+        const updateProjectQuery = 'UPDATE projetos SET Nome = ?, NucleoResponsavel = ?, Descricao = ?, Area = ?, PessoasImpactadas = ?, DataFundacao = ?, Cidade = ?, fotoCapa = ?, foto1 = ?, foto2 = ?, foto3 = ?, foto4 = ?, foto5 = ? WHERE ID = ?';
+        const params = [Nome, NucleoResponsavel, descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa, ...valoresFotosNumeradas, projectId];
+
+        connection.query(updateProjectQuery, params, (error, results) => {
+            if (error) {
+                console.error('Erro ao editar Projeto: ' + error.message);
+                res.status(500).send('Erro ao editar Projeto');
+                return;
+            }
+            console.log('Projeto editado com sucesso!');
+            res.status(200).send('Projeto editado com sucesso!');
+        });
+    });
+};
+
+
+const patchProject = (req, res) => {
+    const projectId = req.params.id; // Obtenha o ID do projeto a ser editado
+    const { campoAAlterar, novoValor } = req.body;
+
+    // Verificar se todos os campos obrigatórios estão presentes
+    if (!projectId || !campoAAlterar || !novoValor) {
+        res.status(400).send('O ID do projeto, o campo a ser alterado e o novo valor são obrigatórios');
+        return;
+    }
+
+    // Verificar se o projeto com o ID fornecido existe no banco de dados
+    const checkProjectQuery = 'SELECT * FROM projetos WHERE ID = ?';
+    connection.query(checkProjectQuery, [projectId], (error, results) => {
+        if (error) {
+            console.error('Erro ao verificar projeto: ' + error.message);
+            res.status(500).send('Erro ao verificar projeto');
+            return;
+        }
+
+        // Verificar se o projeto com o ID fornecido foi encontrado
+        if (results.length === 0) {
+            res.status(404).send('Projeto não encontrado');
+            return;
+        }
+
+        // Atualizar o campo específico do projeto no banco de dados
+        const updateFieldQuery = `UPDATE projetos SET ${campoAAlterar} = ? WHERE ID = ?`;
+        connection.query(updateFieldQuery, [novoValor, projectId], (error, results) => {
+            if (error) {
+                console.error('Erro ao atualizar campo do projeto: ' + error.message);
+                res.status(500).send('Erro ao atualizar campo do projeto');
+                return;
+            }
+            console.log(`Campo ${campoAAlterar} do projeto ${projectId} atualizado com sucesso!`);
+            res.status(200).send(`Campo ${campoAAlterar} do projeto ${projectId} atualizado com sucesso!`);
+        });
     });
 };
 
@@ -158,5 +232,5 @@ const deleteProjectById = (req, res) => {
 };
 
 
-module.exports = { createProject, returnProjects, returnProjectById, editProjectById, deleteProjectById }
+module.exports = { createProject, returnProjects, returnProjectById, editProjectById, deleteProjectById, patchProject }
 

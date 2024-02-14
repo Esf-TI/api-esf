@@ -7,11 +7,11 @@ require('dotenv').config();
 const tokenSecret = process.env.JWT_SECRET;
 
 const CreateNucleo = async (req, res) => {
-  const { email, senha, nomeNucleo, descricao, cidade, dataFundacao, fotoCapa, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram} = req.body;
-  console.log(email, senha, nomeNucleo, descricao, cidade, dataFundacao, fotoCapa, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram)
+  const { email, senha, nomeNucleo, descricao, cidade, dataFundacao, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram} = req.body;
+  console.log(email, senha, nomeNucleo, descricao, cidade, dataFundacao, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram)
   const upload = req.file
   // Verificação se todos os campos estão preenchidos
-  if (!email || !senha || !nomeNucleo || !descricao || !cidade || !dataFundacao || !fotoCapa || !linkDoacao || !linkSite || !linkLinkedin || !linkFacebook || !linkInstagram) {
+  if (!email || !senha || !nomeNucleo || !descricao || !cidade || !dataFundacao || !linkDoacao || !linkSite || !linkLinkedin || !linkFacebook || !linkInstagram) {
     return res.status(400).send('Por favor, preencha todos os campos');
   }
 
@@ -27,8 +27,8 @@ const image = `https://storage.googleapis.com/${BUCKET}/${upload.filename}`;
     // Geração do hash da senha
     const hashedPassword = await bcrypt.hash(senha, 10); // O segundo argumento é o "salt rounds"
 
-    const inserirNucleo = 'INSERT INTO Nucleo (Nome, Email, Senha, Cidade, Descricao, DataFundacao, fotoCapa, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-    connection.query(inserirNucleo, [nomeNucleo, email, hashedPassword, cidade, descricao, dataFundacao, image, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram  ], async (err, result) => {
+    const inserirNucleo = 'INSERT INTO Nucleo (Nome, Email, Senha, Cidade, Descricao, DataFundacao, fotoCapa, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    connection.query(inserirNucleo, [nomeNucleo, email, hashedPassword, cidade, descricao, dataFundacao, image, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram, "pending" ], async (err, result) => {
       if (err) {
         console.log(err);
         if (err.code === 'ER_DUP_ENTRY') {
@@ -73,6 +73,7 @@ const LoginNucleo = async (req, res) => {
       if (!senhaCorrespondente) {
         return res.status(401).send('Senha incorreta');
       }
+      const tokenSecret = 'chaveSecretaToken';
 
       // Gerar o token JWT com as informações do usuário
       const token = jwt.sign({ id: nucleo.ID, email: nucleo.Email }, tokenSecret, { expiresIn: '1h' });
@@ -86,7 +87,7 @@ const LoginNucleo = async (req, res) => {
         }
 
         // Retornar o token como resposta
-        return res.status(200).json({ token });
+        return res.status(200).json({ nucleo  });
       });
     });
   } catch (error) {
@@ -109,6 +110,31 @@ const GetAllNucleos = async (req, res) => {
     console.log(error);
     return res.status(500).send('Erro ao buscar os núcleos');
   }
+};
+
+const getApprovedNucleos = (req, res) => {
+  // Consulta SQL para buscar os núcleos aprovados
+  const sql = 'SELECT * FROM Nucleo WHERE status = ?';
+  
+  // Valor a ser comparado com o campo "status"
+  const statusAprovado = 'approved';
+
+  connection.query(sql, [statusAprovado], (error, results) => {
+      if (error) {
+          console.error('Erro ao buscar núcleos aprovados: ' + error.message);
+          res.status(500).send('Erro ao buscar núcleos aprovados');
+          return;
+      }
+
+      // Se não houver resultados, significa que nenhum núcleo foi encontrado com status "approved"
+      if (results.length === 0) {
+          res.status(404).send('Nenhum núcleo aprovado encontrado');
+          return;
+      }
+
+      // Se houver resultados, retorna os núcleos encontrados
+      res.status(200).json(results);
+  });
 };
 
 const GetNucleoById = async (req, res) => {
@@ -134,5 +160,81 @@ const GetNucleoById = async (req, res) => {
   }
 };
 
-module.exports = { CreateNucleo,LoginNucleo, GetAllNucleos, GetNucleoById }
+
+const updateNucleoStatus = (req, res) => {
+  const nucleoId = req.params.id;
+  const { novoStatus } = req.body;
+
+  // Verificar se o ID do núcleo e o novo status foram fornecidos
+  if (!nucleoId || !novoStatus) {
+      res.status(400).send('O ID do núcleo e o novo status são obrigatórios');
+      return;
+  }
+
+  // Verificar se o novo status é válido
+  if (novoStatus !== 'approved' && novoStatus !== 'reproved') {
+      res.status(400).send('O novo status deve ser "approved" ou "reproved"');
+      return;
+  }
+
+  // Atualizar o status do núcleo no banco de dados
+  const updateStatusQuery = 'UPDATE Nucleo SET status = ? WHERE ID = ?';
+  connection.query(updateStatusQuery, [novoStatus, nucleoId], (error, results) => {
+      if (error) {
+          console.error('Erro ao atualizar status do núcleo: ' + error.message);
+          res.status(500).send('Erro ao atualizar status do núcleo');
+          return;
+      }
+
+      // Verificar se algum núcleo foi atualizado
+      if (results.affectedRows === 0) {
+          res.status(404).send('Núcleo não encontrado');
+          return;
+      }
+
+      console.log(`Status do núcleo ${nucleoId} atualizado para ${novoStatus}`);
+      res.status(200).send(`Status do núcleo ${nucleoId} atualizado para ${novoStatus}`);
+  });
+};
+
+const patchNucleo = (req, res) => {
+  const nucleoId = req.params.id; // Obtenha o ID do núcleo a ser editado
+  const { campoAAlterar, novoValor } = req.body;
+
+  // Verificar se todos os campos obrigatórios estão presentes
+  if (!nucleoId || !campoAAlterar || !novoValor) {
+      res.status(400).send('O ID do núcleo, o campo a ser alterado e o novo valor são obrigatórios');
+      return;
+  }
+
+  // Verificar se o núcleo com o ID fornecido existe no banco de dados
+  const checkNucleoQuery = 'SELECT * FROM Nucleo WHERE ID = ?';
+  connection.query(checkNucleoQuery, [nucleoId], (error, results) => {
+      if (error) {
+          console.error('Erro ao verificar núcleo: ' + error.message);
+          res.status(500).send('Erro ao verificar núcleo');
+          return;
+      }
+
+      // Verificar se o núcleo com o ID fornecido foi encontrado
+      if (results.length === 0) {
+          res.status(404).send('Núcleo não encontrado');
+          return;
+      }
+
+      // Atualizar o campo específico do núcleo no banco de dados
+      const updateFieldQuery = `UPDATE Nucleo SET ${campoAAlterar} = ? WHERE ID = ?`;
+      connection.query(updateFieldQuery, [novoValor, nucleoId], (error, results) => {
+          if (error) {
+              console.error('Erro ao atualizar campo do núcleo: ' + error.message);
+              res.status(500).send('Erro ao atualizar campo do núcleo');
+              return;
+          }
+          console.log(`Campo ${campoAAlterar} do núcleo ${nucleoId} atualizado com sucesso!`);
+          res.status(200).send(`Campo ${campoAAlterar} do núcleo ${nucleoId} atualizado com sucesso!`);
+      });
+  });
+};
+
+module.exports = { CreateNucleo,LoginNucleo, GetAllNucleos, GetNucleoById, getApprovedNucleos, updateNucleoStatus, patchNucleo }
 

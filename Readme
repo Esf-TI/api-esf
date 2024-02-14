@@ -1,0 +1,15 @@
+## Instale o XAMPP
+    pré-requisitos:
+- Ative o Apache
+- Ative o SQL
+- Acesse localhost
+- Acesse phpmyadmin
+
+
+## Iniciando o servidor
+- npm install
+- npm start
+
+
+
+Tem um exemplo de como estão as requisições no documento esfrequests

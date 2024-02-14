@@ -8,26 +8,32 @@ const photo = multer({
     limits: 10 * 1024 * 1024,
 }).single('photo')
 
-const upload = multer({
+const Multer = multer({
     storage: multer.memoryStorage(),
-    limits: {
-        fileSize: 10 * 1024 * 1024 // Limite de 10MB por arquivo
-    }
-}).array('files', 6);
+    limits: 10 * 1024 * 1024,
+  }).fields([{ name: 'fotoCapa', maxCount: 1 }, { name: 'fotos', maxCount: 8 }])
 
 const uploadProjects = require('../middlewares/uploadsProjects');
 const uploadImage = require('../middlewares/storageUpload');
 const verificarToken = require('../middlewares/verifyToken');
 
-router.post('/createProject',verificarToken, upload, uploadProjects, ProjetcsControllers.createProject);
+//CRIAR PROJETO ( PRECISA DO ID DO NÚCLEO QUE IRÁ RETORNAR APÓS O LOGIN)
+router.post('/projetos',verificarToken, Multer, uploadProjects, ProjetcsControllers.createProject);
 
-router.get('/projects',verificarToken, ProjetcsControllers.returnProjects);
+//RETORNAR TODOS OS PROJETOS
+router.get('/projetos', ProjetcsControllers.returnProjects);
 
-router.get('/projects/:id', ProjetcsControllers.returnProjectById);
+//RETORNAR UM PROJETO ESPECÍFICO
+router.get('/projetos/:id', ProjetcsControllers.returnProjectById);
 
-router.patch('/projects/:id', photo, uploadImage, ProjetcsControllers.editProjectById);
+//ALTERAR TODOS OS CAMPOS DE UM PROJETO
+router.put('/projetos/:id',  Multer, uploadProjects, ProjetcsControllers.editProjectById);
 
-router.delete('/projects/:id', ProjetcsControllers.deleteProjectById);
+//ALTERAR SÓ UM CAMPO ESPECÍFICO DO PROJETO
+router.patch('/projetosedit/:id', photo, uploadImage, ProjetcsControllers.patchProject);
+
+//APAGAR O PROJETO
+router.delete('/projetos/:id', ProjetcsControllers.deleteProjectById);
 
 
 module.exports = router;
