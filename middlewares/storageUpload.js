@@ -1,4 +1,4 @@
-const BUCKET = 'engenharia-sem-fronteira.appspot.com'
+const BUCKET = 'engenheiros-sem-fronteiras.appspot.com'
 const admin = require('../firebase')
 const FOLDER_NAME = 'imagens';
 

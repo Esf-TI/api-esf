@@ -1,5 +1,5 @@
 const connection = require('../connection');
-const BUCKET = 'engenharia-sem-fronteira.appspot.com'
+const BUCKET = 'engenheiros-sem-fronteiras.appspot.com'
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();

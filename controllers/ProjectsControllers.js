@@ -1,5 +1,5 @@
 const connection = require('../connection');
-const BUCKET = 'engenharia-sem-fronteira.appspot.com'
+const BUCKET = 'engenheiros-sem-fronteiras.appspot.com'
 
 const createProject = (req, res) => {
     const { Nome, NucleoResponsavel, Area, descricao, PessoasImpactadas, DataFundacao, Cidade } = req.body;
