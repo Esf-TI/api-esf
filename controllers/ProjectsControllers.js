@@ -17,7 +17,7 @@ const createProject = (req, res) => {
         // Construir o URL da imagem usando o nome do arquivo
         return `https://storage.googleapis.com/${BUCKET}/${upload.filename}`;
     });
-    
+
 
     const fotosNumeradas = {
         foto1: null,
@@ -30,12 +30,12 @@ const createProject = (req, res) => {
     fotos.slice(0, 5).forEach((foto, index) => {
         fotosNumeradas[`foto${index + 1}`] = foto;
     });
-    
+
     // Extrair os valores dos URLs das fotos numeradas
     const valoresFotosNumeradas = Object.values(fotosNumeradas);
 
     const sql = 'INSERT INTO projetos (Nome, NucleoResponsavel, Descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa, foto1, foto2, foto3, foto4, foto5) VALUES (?, ?, ?, ?,?, ?, ?, ?, ?, ?, ?, ?, ?)';
-    connection.query(sql, [Nome, NucleoResponsavel, descricao,Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa, ...valoresFotosNumeradas], (error, results, fields) => {
+    connection.query(sql, [Nome, NucleoResponsavel, descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa, ...valoresFotosNumeradas], (error, results, fields) => {
 
         if (error) {
             console.error('Erro ao criar Projeto: ' + error.message);
@@ -61,7 +61,7 @@ const returnProjects = (req, res) => {
 
         // Organizando os projetos por área
         results.forEach((projeto) => {
-            const { Area, Nome, fotoCapa, Id, Descricao, NucleoResponsavel } = projeto;
+            const { Area, Nome, fotoCapa, Id, Descricao, NucleoResponsavel, DataFundacao, Cidade, foto1, foto2, foto3, foto4, foto5 } = projeto;
 
             if (!projetosPorArea[Area]) {
                 projetosPorArea[Area] = [];
@@ -72,7 +72,69 @@ const returnProjects = (req, res) => {
                 fotoCapa,
                 Id,
                 Descricao,
-                NucleoResponsavel
+                NucleoResponsavel,
+                DataFundacao,
+                Cidade,
+                foto1,
+                foto2,
+                foto3,
+                foto4,
+                foto5
+
+            });
+        });
+
+        const projetosAgrupados = Object.keys(projetosPorArea).map((area) => ({
+            area,
+            projetos: projetosPorArea[area],
+        }));
+        res.status(200).json(projetosAgrupados); // Retorna os projetos organizados por área
+    });
+};
+
+const returnProjectsNucleo = (req, res) => {
+    const nucleoId = req.params.nucleoId; // Obtém o ID do núcleo logado
+
+    const sql = 'SELECT * FROM projetos WHERE NucleoResponsavel = ?'; // Consulta SQL filtrando pelo NucleoResponsavel
+
+    connection.query(sql, [nucleoId], (error, results, fields) => {
+        if (error) {
+            console.error('Erro ao buscar projetos: ' + error.message);
+            res.status(500).send('Erro ao buscar projetos');
+            return;
+        }
+
+        // Verifica se há projetos encontrados
+        if (results.length === 0) {
+            res.status(404).send('Nenhum projeto encontrado para este núcleo.');
+            return;
+        }
+
+        // Objeto para armazenar os projetos agrupados por área
+        const projetosPorArea = {};
+
+        // Organizando os projetos por área
+        results.forEach((projeto) => {
+            const { Area, Nome, fotoCapa, ID, Descricao, NucleoResponsavel, DataFundacao, Cidade, foto1, foto2, foto3, foto4, foto5 } = projeto;
+
+            if (!projetosPorArea[Area]) {
+                projetosPorArea[Area] = [];
+            }
+
+            projetosPorArea[Area].push({
+                Nome,
+                fotoCapa,
+                ID,
+                Descricao,
+                NucleoResponsavel,
+                DataFundacao,
+                Cidade,
+                foto1,
+                foto2,
+                foto3,
+                foto4,
+                foto5
+
             });
         });
 
@@ -173,7 +235,7 @@ const editProjectById = (req, res) => {
 const patchProject = (req, res) => {
     const projectId = req.params.id; // Obtenha o ID do projeto a ser editado
     const { campoAAlterar, novoValor } = req.body;
-
+    console.log(campoAAlterar, novoValor)
     // Verificar se todos os campos obrigatórios estão presentes
     if (!projectId || !campoAAlterar || !novoValor) {
         res.status(400).send('O ID do projeto, o campo a ser alterado e o novo valor são obrigatórios');
@@ -232,5 +294,5 @@ const deleteProjectById = (req, res) => {
 };
 
 
-module.exports = { createProject, returnProjects, returnProjectById, editProjectById, deleteProjectById, patchProject }
+module.exports = { createProject, returnProjects, returnProjectById, editProjectById, deleteProjectById, patchProject, returnProjectsNucleo }
 

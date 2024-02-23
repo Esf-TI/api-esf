@@ -14,6 +14,8 @@ const uploadImage = require('../middlewares/storageUpload');
 //CRIAR NÚCLEO
 router.post('/nucleos', photo, uploadImage, NucleosControllers.CreateNucleo);
 
+//ATUALIZA FOTO DO NUCLEO
+router.patch('/photo/:id', photo, uploadImage, NucleosControllers.updateNucleoFoto)
 //LOGAR COMO NÚCLEO
 router.post('/login', NucleosControllers.LoginNucleo);
 
