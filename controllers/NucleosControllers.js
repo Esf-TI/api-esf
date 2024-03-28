@@ -8,7 +8,6 @@ const tokenSecret = process.env.JWT_SECRET;
 
 const CreateNucleo = async (req, res) => {
   const { email, senha, nomeNucleo, descricao, cidade, dataFundacao, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram } = req.body;
-  console.log(email, senha, nomeNucleo, descricao, cidade, dataFundacao, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram)
   const upload = req.file
   // Verificação se todos os campos estão preenchidos
   if (!email || !senha || !nomeNucleo || !descricao || !cidade || !dataFundacao || !linkDoacao || !linkSite || !linkLinkedin || !linkFacebook || !linkInstagram) {

@@ -15,9 +15,11 @@ app.use(cors({
 //IMPORTAÇÃO DAS ROTAS
 const NucleosRoutes = require('../backend/routes/NucleosRoutes');
 const ProjectsRoutes = require('../backend/routes/ProjectsRoutes');
+const BlogRoutes = require('./routes/BlogRoutes');
 
 app.use('/nucleos', NucleosRoutes);
 app.use('/projetos', ProjectsRoutes);
+app.use('/blog', BlogRoutes);
 
 
 app.listen(3000, () => {

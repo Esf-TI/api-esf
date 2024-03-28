@@ -31,6 +31,18 @@ connection.connect((err) => {
             }
             console.log('Banco de dados selecionado com sucesso!');
 
+            connection.query(`CREATE TABLE IF NOT EXISTS Blog (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                title VARCHAR(255),
+                description VARCHAR(255),
+                image VARCHAR(255)
+            )`), (err, result) => {
+                if (err) {
+                    console.error('Erro ao criar a tabela Blog: ' + err.stack);
+                    return;
+                }
+            }
+
             // Criar tabela Nucleo
             connection.query(`CREATE TABLE IF NOT EXISTS Nucleo (
                 ID INT AUTO_INCREMENT PRIMARY KEY,
