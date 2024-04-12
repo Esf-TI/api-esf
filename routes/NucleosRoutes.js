@@ -34,4 +34,6 @@ router.patch('/status/:id', NucleosControllers.updateNucleoStatus)
 //ROTA PARA EDITAR QUALQUER CAMPO DO BANCO DE DADOS DO NÚCLEO ( EDIÇÃO DO PRÓPRIO NÚCLEO )
 router.patch('/nucleos/:id', NucleosControllers.patchNucleo)
 
+router.delete('/nucleos/:id', NucleosControllers.deleteNucleo)
+
 module.exports = router;

@@ -58,6 +58,7 @@ connection.connect((err) => {
                 linkLinkedin VARCHAR(255),
                 linkFacebook VARCHAR(255),
                 linkInstagram VARCHAR(255),
+                status VARCHAR(255),
                 Token VARCHAR(255)
             )`, (err, result) => {
                 if (err) {

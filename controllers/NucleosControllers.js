@@ -6,6 +6,31 @@ require('dotenv').config();
 
 const tokenSecret = process.env.JWT_SECRET;
 
+const deleteNucleo = async (req, res) => {
+  const { id } = req.params;  // ID do núcleo a ser deletado, assumindo que é passado na URL
+
+  if (!id) {
+    return res.status(400).send('ID do núcleo não fornecido');
+  }
+
+  try {
+    const deleteQuery = 'DELETE FROM Nucleo WHERE ID = ?';
+    connection.query(deleteQuery, [id], (err, result) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).send('Erro ao deletar o núcleo');
+      }
+      if (result.affectedRows === 0) {
+        return res.status(404).send('Núcleo não encontrado');
+      }
+      return res.status(200).send('Núcleo deletado com sucesso');
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).send('Erro ao tentar deletar o núcleo');
+  }
+};
+
 const CreateNucleo = async (req, res) => {
   const { email, senha, nomeNucleo, descricao, cidade, dataFundacao, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram } = req.body;
   const upload = req.file
@@ -260,5 +285,5 @@ const updateNucleoFoto = async (req, res) => {
     return res.status(500).send('Erro ao atualizar a foto do núcleo');
   }
 };
-module.exports = { CreateNucleo, LoginNucleo, GetAllNucleos, GetNucleoById, getApprovedNucleos, updateNucleoStatus, patchNucleo, updateNucleoFoto }
+module.exports = { CreateNucleo, LoginNucleo, GetAllNucleos, GetNucleoById, getApprovedNucleos, updateNucleoStatus, patchNucleo, updateNucleoFoto, deleteNucleo }
 
