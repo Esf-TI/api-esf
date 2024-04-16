@@ -8,6 +8,13 @@ const connection = mysql.createConnection({
     database: 'esf'
 });
 
+// const connection = mysql.createConnection({
+//     host: 'esf.org.br',
+//     user: 'esfor8190_dev',
+//     password: '123456789ESF.202324',
+//     database: 'esfor8190_bancoplataforma'
+// });
+
 connection.connect((err) => {
     if (err) {
         console.error('Erro ao conectar ao banco de dados: ' + err.stack);

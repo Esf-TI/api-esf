@@ -34,7 +34,7 @@ const createProject = (req, res) => {
     // Extrair os valores dos URLs das fotos numeradas
     const valoresFotosNumeradas = Object.values(fotosNumeradas);
 
-    const sql = 'INSERT INTO projetos (Nome, NucleoResponsavel, Descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa, foto1, foto2, foto3, foto4, foto5) VALUES (?, ?, ?, ?,?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    const sql = 'INSERT INTO Projetos (Nome, NucleoResponsavel, Descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa, foto1, foto2, foto3, foto4, foto5) VALUES (?, ?, ?, ?,?, ?, ?, ?, ?, ?, ?, ?, ?)';
     connection.query(sql, [Nome, NucleoResponsavel, descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa, ...valoresFotosNumeradas], (error, results, fields) => {
 
         if (error) {
@@ -48,7 +48,7 @@ const createProject = (req, res) => {
 };
 
 const returnProjects = (req, res) => {
-    const sql = 'SELECT * FROM projetos';
+    const sql = 'SELECT * FROM Projetos';
 
     connection.query(sql, (error, results, fields) => {
         if (error) {
@@ -95,7 +95,7 @@ const returnProjects = (req, res) => {
 const returnProjectsNucleo = (req, res) => {
     const nucleoId = req.params.nucleoId; // Obtém o ID do núcleo logado
 
-    const sql = 'SELECT * FROM projetos WHERE NucleoResponsavel = ?'; // Consulta SQL filtrando pelo NucleoResponsavel
+    const sql = 'SELECT * FROM Projetos WHERE NucleoResponsavel = ?'; // Consulta SQL filtrando pelo NucleoResponsavel
 
     connection.query(sql, [nucleoId], (error, results, fields) => {
         if (error) {
@@ -150,7 +150,7 @@ const returnProjectsNucleo = (req, res) => {
 const returnProjectById = (req, res) => {
     const projectId = req.params.id; // Obtém o ID do projeto a partir dos parâmetros da rota
     console.log(projectId)
-    const sql = 'SELECT * FROM projetos WHERE id = ?';
+    const sql = 'SELECT * FROM Projetos WHERE id = ?';
 
     connection.query(sql, [projectId], (error, results, fields) => {
         if (error) {
@@ -182,7 +182,7 @@ const editProjectById = (req, res) => {
     }
 
     // Verificar se o projeto com o ID fornecido existe no banco de dados
-    const checkProjectQuery = 'SELECT * FROM projetos WHERE ID = ?';
+    const checkProjectQuery = 'SELECT * FROM Projetos WHERE ID = ?';
     connection.query(checkProjectQuery, [projectId], (error, results) => {
         if (error) {
             console.error('Erro ao verificar projeto: ' + error.message);
@@ -216,7 +216,7 @@ const editProjectById = (req, res) => {
         const valoresFotosNumeradas = Object.values(fotosNumeradas);
 
         // Atualizar os dados do projeto no banco de dados
-        const updateProjectQuery = 'UPDATE projetos SET Nome = ?, NucleoResponsavel = ?, Descricao = ?, Area = ?, PessoasImpactadas = ?, DataFundacao = ?, Cidade = ?, fotoCapa = ?, foto1 = ?, foto2 = ?, foto3 = ?, foto4 = ?, foto5 = ? WHERE ID = ?';
+        const updateProjectQuery = 'UPDATE Projetos SET Nome = ?, NucleoResponsavel = ?, Descricao = ?, Area = ?, PessoasImpactadas = ?, DataFundacao = ?, Cidade = ?, fotoCapa = ?, foto1 = ?, foto2 = ?, foto3 = ?, foto4 = ?, foto5 = ? WHERE ID = ?';
         const params = [Nome, NucleoResponsavel, descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa, ...valoresFotosNumeradas, projectId];
 
         connection.query(updateProjectQuery, params, (error, results) => {
@@ -243,7 +243,7 @@ const patchProject = (req, res) => {
     }
 
     // Verificar se o projeto com o ID fornecido existe no banco de dados
-    const checkProjectQuery = 'SELECT * FROM projetos WHERE ID = ?';
+    const checkProjectQuery = 'SELECT * FROM Projetos WHERE ID = ?';
     connection.query(checkProjectQuery, [projectId], (error, results) => {
         if (error) {
             console.error('Erro ao verificar projeto: ' + error.message);
@@ -258,7 +258,7 @@ const patchProject = (req, res) => {
         }
 
         // Atualizar o campo específico do projeto no banco de dados
-        const updateFieldQuery = `UPDATE projetos SET ${campoAAlterar} = ? WHERE ID = ?`;
+        const updateFieldQuery = `UPDATE Projetos SET ${campoAAlterar} = ? WHERE ID = ?`;
         connection.query(updateFieldQuery, [novoValor, projectId], (error, results) => {
             if (error) {
                 console.error('Erro ao atualizar campo do projeto: ' + error.message);
@@ -274,7 +274,7 @@ const patchProject = (req, res) => {
 const deleteProjectById = (req, res) => {
     const projectId = req.params.id; // Obtém o ID do projeto a partir dos parâmetros da rota
 
-    const sql = 'DELETE FROM projetos WHERE id = ?';
+    const sql = 'DELETE FROM Projetos WHERE id = ?';
 
     connection.query(sql, [projectId], (error, results, fields) => {
         if (error) {
