@@ -8,7 +8,16 @@ const photo = multer({
   limits: 10 * 1024 * 1024,
 }).single('imagem')
 const uploadImage = require('../middlewares/storageUpload');
+const { route } = require('./NucleosRoutes');
 
-router.post('/',photo,uploadImage, BlogController.CreateBlog);
+router.post('/createBlog', photo, uploadImage, BlogController.CreateBlog);
 
+router.get('/blog', BlogController.returnAllBlog);
+
+router.get('/blog/:id', BlogController.returnBlogById);
+
+
+router.patch('/updateBlog/:id',photo, uploadImage, BlogController.updateBlog);
+
+router.delete('/blog/:id', BlogController.deleteBlog);
 module.exports = router

@@ -4,7 +4,7 @@ const mysql = require('mysql');
 const connection = mysql.createConnection({
     host: 'localhost',
     user: 'root',
-    password: 'root',
+    password: '',
     database: 'esf'
 });
 
@@ -41,7 +41,7 @@ connection.connect((err) => {
             connection.query(`CREATE TABLE IF NOT EXISTS Blog (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 title VARCHAR(255),
-                description VARCHAR(255),
+                description LONGTEXT,
                 image VARCHAR(255)
             )`), (err, result) => {
                 if (err) {
