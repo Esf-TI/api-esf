@@ -38,6 +38,17 @@ connection.connect((err) => {
             }
             console.log('Banco de dados selecionado com sucesso!');
 
+            connection.query(`CREATE TABLE IF NOT EXISTS Admin (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                email VARCHAR(255) NOT NULL UNIQUE,
+                password VARCHAR(255) NOT NULL
+            )`), (err, result) => {
+                if (err) {
+                    console.error('Erro ao criar a tabela Admin: ' + err.stack);
+                    return;
+                }
+            }
+
             connection.query(`CREATE TABLE IF NOT EXISTS Blog (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 title VARCHAR(255),
@@ -99,6 +110,42 @@ connection.connect((err) => {
                     }
                     console.log('Tabela Projetos criada com sucesso ou já existente!');
                 });
+
+                connection.query(`
+                            CREATE TABLE IF NOT EXISTS AdminTokens (
+                                id INT AUTO_INCREMENT PRIMARY KEY,
+                                adminId INT,
+                                accessToken VARCHAR(255),
+                                refreshToken VARCHAR(255),
+                                accessTokenExpires DATETIME,
+                                refreshTokenExpires DATETIME,
+                                FOREIGN KEY (adminId) REFERENCES Admin(id)
+                            )
+                        `, (err, result) => {
+                            if (err) {
+                                console.error('Erro ao criar a tabela AdminTokens: ' + err.stack);
+                                return;
+                            }
+                            console.log('Tabela AdminTokens criada com sucesso!');
+                        });
+
+                        connection.query(`
+                            CREATE TABLE IF NOT EXISTS NucleoTokens (
+                                id INT AUTO_INCREMENT PRIMARY KEY,
+                                nucleoId INT,
+                                accessToken VARCHAR(255),
+                                refreshToken VARCHAR(255),
+                                accessTokenExpires DATETIME,
+                                refreshTokenExpires DATETIME,
+                                FOREIGN KEY (nucleoId) REFERENCES Nucleo(ID)
+                            )
+                        `, (err, result) => {
+                            if (err) {
+                                console.error('Erro ao criar a tabela NucleoTokens: ' + err.stack);
+                                return;
+                            }
+                            console.log('Tabela NucleoTokens criada com sucesso!');
+                        });
             });
         });
     });

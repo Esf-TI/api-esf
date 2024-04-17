@@ -2,6 +2,7 @@ const connection = require('../connection');
 const BUCKET = 'engenheiros-sem-fronteiras.appspot.com'
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { generateTokens, refreshAccessToken, authenticateToken } = require('../middlewares/authFunctions');
 require('dotenv').config();
 
 const tokenSecret = process.env.JWT_SECRET;
@@ -60,7 +61,8 @@ const CreateNucleo = async (req, res) => {
         }
         return res.status(500).send('Erro ao criar o núcleo');
       }
-      return res.status(200).send('Núcleo criado com sucesso');
+      const nucleoId = result.insertId;
+      return res.status(200).send({ id: nucleoId, message:"Núcleo criado com sucesso!"});
     });
   } catch (error) {
     console.log(error);
@@ -71,55 +73,59 @@ const CreateNucleo = async (req, res) => {
 const LoginNucleo = async (req, res) => {
   const { email, senha } = req.body;
 
-  // Verificação se o email e senha foram fornecidos
   if (!email || !senha) {
     return res.status(400).send('Por favor, forneça o email e a senha');
   }
 
   try {
-    // Verificar se o email existe no banco de dados
     const buscarNucleo = 'SELECT * FROM Nucleo WHERE Email = ?';
     connection.query(buscarNucleo, [email], async (err, results) => {
       if (err) {
-        console.log(err);
+        console.error('Erro ao tentar fazer o login:', err);
         return res.status(500).send('Erro ao tentar fazer o login');
       }
 
-      // Verificar se o email foi encontrado
       if (results.length === 0) {
         return res.status(404).send('Usuário não encontrado');
       }
 
       const nucleo = results[0];
-
-      // Comparar a senha fornecida com a senha criptografada no banco de dados
       const senhaCorrespondente = await bcrypt.compare(senha, nucleo.Senha);
       if (!senhaCorrespondente) {
         return res.status(401).send('Senha incorreta');
       }
-      const tokenSecret = 'chaveSecretaToken';
 
-      // Gerar o token JWT com as informações do usuário
-      const token = jwt.sign({ id: nucleo.ID, email: nucleo.Email }, tokenSecret, { expiresIn: '1h' });
+      const tokens = generateTokens(nucleo.ID,"nucleo");
 
-      // Armazenar o token no banco de dados
-      const atualizarToken = 'UPDATE Nucleo SET Token = ? WHERE ID = ?';
-      connection.query(atualizarToken, [token, nucleo.ID], (err, result) => {
+      const limparTokensSql = 'DELETE FROM NucleoTokens WHERE nucleoId = ?';
+      connection.query(limparTokensSql, [nucleo.ID], (err, deleteResult) => {
         if (err) {
-          console.log(err);
-          return res.status(500).send('Erro ao gerar o token');
+          console.error('Erro ao limpar tokens antigos:', err);
+          return res.status(500).send('Erro ao atualizar tokens');
         }
 
-        // Retornar o token como resposta
-        return res.status(200).json({ nucleo });
+        const insertTokensSql = 'INSERT INTO NucleoTokens (nucleoId, accessToken, refreshToken, accessTokenExpires, refreshTokenExpires) VALUES (?, ?, ?, ?, ?)';
+        connection.query(insertTokensSql, [nucleo.ID, tokens.accessToken, tokens.refreshToken, tokens.accessTokenExpires, tokens.refreshTokenExpires], (err, insertResult) => {
+          if (err) {
+            console.error('Erro ao inserir novos tokens:', err);
+            return res.status(500).send('Erro ao salvar os tokens no banco de dados');
+          }
+
+          res.status(200).json({
+            message: 'Login realizado com sucesso.',
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            accessTokenExpires: tokens.accessTokenExpires,
+            refreshTokenExpires: tokens.refreshTokenExpires
+          });
+        });
       });
     });
   } catch (error) {
-    console.log(error);
+    console.error('Erro ao tentar fazer o login:', error);
     return res.status(500).send('Erro ao tentar fazer o login');
   }
 };
-
 const GetAllNucleos = async (req, res) => {
   try {
     const buscarTodosNucleos = 'SELECT * FROM Nucleo';

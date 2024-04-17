@@ -18,7 +18,7 @@ const uploadImage = require('../middlewares/storageUpload');
 const verificarToken = require('../middlewares/verifyToken');
 
 //CRIAR PROJETO ( PRECISA DO ID DO NÚCLEO QUE IRÁ RETORNAR APÓS O LOGIN)
-router.post('/projetos', Multer, uploadProjects, ProjetcsControllers.createProject);
+router.post('/projetos', Multer, ProjetcsControllers.createProject);
 
 //RETORNAR TODOS OS PROJETOS
 router.get('/projetos', ProjetcsControllers.returnProjects);

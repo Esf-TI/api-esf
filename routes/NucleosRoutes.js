@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const NucleosControllers = require('../controllers/NucleosControllers');
+const {authenticateAdmin} = require('../middlewares/authFunctions')
 
 const multer = require('multer');
 
@@ -29,7 +30,7 @@ router.get('/nucleos/:id', NucleosControllers.GetNucleoById)
 router.get('/nucleosaprovados', NucleosControllers.getApprovedNucleos)
 
 //ROTA PARA ATUALIZAR O STATUS DE UM NÚCLEO ( VALORES POSSÍVEIS: pending, reproved, approved)
-router.patch('/status/:id', NucleosControllers.updateNucleoStatus)
+router.patch('/status/:id', authenticateAdmin ,NucleosControllers.updateNucleoStatus)
 
 //ROTA PARA EDITAR QUALQUER CAMPO DO BANCO DE DADOS DO NÚCLEO ( EDIÇÃO DO PRÓPRIO NÚCLEO )
 router.patch('/nucleos/:id', NucleosControllers.patchNucleo)

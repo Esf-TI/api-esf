@@ -4,6 +4,7 @@ const BUCKET = 'engenheiros-sem-fronteiras.appspot.com'
 const createProject = (req, res) => {
     const { Nome, NucleoResponsavel, Area, descricao, PessoasImpactadas, DataFundacao, Cidade } = req.body;
     const uploads = req.files;
+    console.log(req.body)
 
     // Verificar se todos os campos obrigatórios estão presentes
     if (!Nome || !descricao || !NucleoResponsavel || !uploads || !PessoasImpactadas || !DataFundacao || !Cidade) {
@@ -13,29 +14,31 @@ const createProject = (req, res) => {
 
     const fotoCapa = `https://storage.googleapis.com/${BUCKET}/${uploads.fotoCapa.filename}`;
 
-    const fotos = uploads.foto.map((upload, index) => {
-        // Construir o URL da imagem usando o nome do arquivo
-        return `https://storage.googleapis.com/${BUCKET}/${upload.filename}`;
-    });
+    // const fotos = uploads.foto.map((upload, index) => {
+    //     // Construir o URL da imagem usando o nome do arquivo
+    //     return `https://storage.googleapis.com/${BUCKET}/${upload.filename}`;
+    // });
 
 
-    const fotosNumeradas = {
-        foto1: null,
-        foto2: null,
-        foto3: null,
-        foto4: null,
-        foto5: null
-    };
+    // const fotosNumeradas = {
+    //     foto1: null,
+    //     foto2: null,
+    //     foto3: null,
+    //     foto4: null,
+    //     foto5: null
+    // };
 
-    fotos.slice(0, 5).forEach((foto, index) => {
-        fotosNumeradas[`foto${index + 1}`] = foto;
-    });
+    // fotos.slice(0, 5).forEach((foto, index) => {
+    //     fotosNumeradas[`foto${index + 1}`] = foto;
+    // });
 
-    // Extrair os valores dos URLs das fotos numeradas
-    const valoresFotosNumeradas = Object.values(fotosNumeradas);
+    // // Extrair os valores dos URLs das fotos numeradas
+    // const valoresFotosNumeradas = Object.values(fotosNumeradas);
 
-    const sql = 'INSERT INTO Projetos (Nome, NucleoResponsavel, Descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa, foto1, foto2, foto3, foto4, foto5) VALUES (?, ?, ?, ?,?, ?, ?, ?, ?, ?, ?, ?, ?)';
-    connection.query(sql, [Nome, NucleoResponsavel, descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa, ...valoresFotosNumeradas], (error, results, fields) => {
+    const sql = 'INSERT INTO Projetos (Nome, NucleoResponsavel, Descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa) VALUES (?, ?, ?, ?,?, ?, ?, ?)';
+    // const sql = 'INSERT INTO Projetos (Nome, NucleoResponsavel, Descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa, foto1, foto2, foto3, foto4, foto5) VALUES (?, ?, ?, ?,?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    // connection.query(sql, [Nome, NucleoResponsavel, descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa, ...valoresFotosNumeradas], (error, results, fields) => {
+    connection.query(sql, [Nome, NucleoResponsavel, descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa], (error, results, fields) => {
 
         if (error) {
             console.error('Erro ao criar Projeto: ' + error.message);
