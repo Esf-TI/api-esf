@@ -9,11 +9,17 @@ const refreshTokenSecret = process.env.REFRESH_TOKEN_SECRET;
 function generateTokens(userId, type) {
   const payload = { userId, type };
 
+  // const accessTokenExpiresIn = '1m'; 
+  // const refreshTokenExpiresIn = '7m'; 
   const accessTokenExpiresIn = '1d'; 
   const refreshTokenExpiresIn = '7d'; 
 
+
   const accessToken = jwt.sign(payload, accessTokenSecret, { expiresIn: accessTokenExpiresIn });
   const refreshToken = jwt.sign(payload, refreshTokenSecret, { expiresIn: refreshTokenExpiresIn });
+
+  // const accessTokenExpires = moment().add(1, 'minutes').toDate();
+  // const refreshTokenExpires = moment().add(7, 'minutes').toDate();
 
   const accessTokenExpires = moment().add(1, 'days').toDate();
   const refreshTokenExpires = moment().add(7, 'days').toDate();
