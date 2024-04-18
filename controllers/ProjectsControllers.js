@@ -273,7 +273,32 @@ const patchProject = (req, res) => {
         });
     });
 };
-
+const updatePhotoCapaProjeto = async (req, res) => {
+    const { id } = req.params;
+    const upload = req.file;
+    console.log('id: ' + id);
+    // Assegurar que a imagem foi enviada corretamente
+    if (!upload || !upload.filename) {
+      res.status(400).send('Imagem não foi enviada corretamente');
+      return;
+    }
+  
+    const image = `https://storage.googleapis.com/${BUCKET}/${upload.filename}`;
+  
+    try {
+      const updateFotoQuery = 'UPDATE Projetos SET fotoCapa = ? WHERE ID = ?';
+      connection.query(updateFotoQuery, [image, id], async (err, result) => {
+        if (err) {
+          console.log(err);
+          return res.status(500).send('Erro ao atualizar a foto do núcleo');
+        }
+        return res.status(200).send('Foto do núcleo atualizada com sucesso');
+      });
+    } catch (error) {
+      console.log(error);
+      return res.status(500).send('Erro ao atualizar a foto do núcleo');
+    }
+  };
 const deleteProjectById = (req, res) => {
     const projectId = req.params.id; // Obtém o ID do projeto a partir dos parâmetros da rota
 
@@ -297,5 +322,5 @@ const deleteProjectById = (req, res) => {
 };
 
 
-module.exports = { createProject, returnProjects, returnProjectById, editProjectById, deleteProjectById, patchProject, returnProjectsNucleo }
+module.exports = { createProject, returnProjects, returnProjectById, editProjectById, deleteProjectById, patchProject, returnProjectsNucleo ,updatePhotoCapaProjeto}
 

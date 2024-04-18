@@ -113,6 +113,7 @@ const LoginNucleo = async (req, res) => {
 
           res.status(200).json({
             message: 'Login realizado com sucesso.',
+            id: nucleo.ID,
             accessToken: tokens.accessToken,
             refreshToken: tokens.refreshToken,
             accessTokenExpires: tokens.accessTokenExpires,

@@ -18,7 +18,7 @@ const uploadImage = require('../middlewares/storageUpload');
 const verificarToken = require('../middlewares/verifyToken');
 
 //CRIAR PROJETO ( PRECISA DO ID DO NÚCLEO QUE IRÁ RETORNAR APÓS O LOGIN)
-router.post('/projetos', Multer, ProjetcsControllers.createProject);
+router.post('/projetos', Multer,uploadImage, ProjetcsControllers.createProject);
 
 //RETORNAR TODOS OS PROJETOS
 router.get('/projetos', ProjetcsControllers.returnProjects);
@@ -34,6 +34,8 @@ router.put('/projetos/:id',  Multer, uploadProjects, ProjetcsControllers.editPro
 //ALTERAR SÓ UM CAMPO ESPECÍFICO DO PROJETO
 router.patch('/projetosedit/:id', photo, uploadImage, ProjetcsControllers.patchProject);
 
+//atuzaliza foto de capa do projeto
+router.patch('/projetoPhoto/:id', photo, uploadImage, ProjetcsControllers.updatePhotoCapaProjeto)
 //APAGAR O PROJETO
 router.delete('/projetos/:id', ProjetcsControllers.deleteProjectById);
 
