@@ -37,4 +37,9 @@ router.patch('/nucleos/:id', NucleosControllers.patchNucleo)
 
 router.delete('/nucleos/:id', NucleosControllers.deleteNucleo)
 
+//ROTA PARA ENVIAR QUEM TEM INTERESSE EM CRIAR NUCLEO
+
+router.post('/fundarnucleo', NucleosControllers.interestFoundingNucleo)
+
+
 module.exports = router;

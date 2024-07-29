@@ -2,6 +2,7 @@ const connection = require('../connection');
 const BUCKET = 'engenheiros-sem-fronteiras.appspot.com'
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 const { generateTokens, refreshAccessToken, authenticateToken } = require('../middlewares/authFunctions');
 require('dotenv').config();
 
@@ -292,5 +293,49 @@ const updateNucleoFoto = async (req, res) => {
     return res.status(500).send('Erro ao atualizar a foto do núcleo');
   }
 };
-module.exports = { CreateNucleo, LoginNucleo, GetAllNucleos, GetNucleoById, getApprovedNucleos, updateNucleoStatus, patchNucleo, updateNucleoFoto, deleteNucleo }
+
+const interestFoundingNucleo = async(req, res) => {
+  const { name, email, city , history } = req.body;
+  
+  if (!name || !email || !city || !history) {
+    return res.status(400).send({ error: 'Todos os campos são obrigatórios.' });
+  }
+
+  let transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_TRANSPORTER,
+      pass: process.env.PASSWORD_TRANSPORTER,
+    },
+  });
+
+  let mailOptions = {
+    from: process.env.EMAIL_TRANSPORTER,
+    to: process.env.FINAL_EMAIL,
+    subject: `Mensagem de ${name} fundar nucleo`,
+    text: `
+${name} está interessado em fundar um núcleo!
+
+Cidade e Estado de Origem: ${city} 
+
+Mensagem: ${history}
+
+------------------
+Por favor, não responda a este e-mail.
+      `,
+  };
+
+  try {
+    let info = await transporter.sendMail(mailOptions);
+    console.log('Email enviado: ' + info.response);
+    res.send('success');
+  } catch (error) {
+    console.log(error);
+    res.status(500).send('error');
+  }
+}
+
+
+
+module.exports = { CreateNucleo, LoginNucleo, GetAllNucleos, GetNucleoById, getApprovedNucleos, updateNucleoStatus, patchNucleo, updateNucleoFoto, deleteNucleo , interestFoundingNucleo }
 

@@ -1,15 +1,15 @@
-const nodemailer = require('nodemailer');
-require('dotenv').config();
+const nodemailer = require("nodemailer");
+require("dotenv").config();
 
-async function enviarEmail(req,res){
+async function enviarEmail(req, res) {
   const { name, email, message } = req.body;
-  
+
   if (!name || !email || !message) {
-    return res.status(400).send({ error: 'Todos os campos são obrigatórios.' });
+    return res.status(400).send({ error: "Todos os campos são obrigatórios." });
   }
 
   let transporter = nodemailer.createTransport({
-    service: 'gmail',
+    service: "gmail",
     auth: {
       user: process.env.EMAIL_TRANSPORTER,
       pass: process.env.PASSWORD_TRANSPORTER,
@@ -18,20 +18,29 @@ async function enviarEmail(req,res){
 
   let mailOptions = {
     from: process.env.EMAIL_TRANSPORTER,
-    to: process.env.CONTACT_EMAIL,
+    to: process.env.FINAL_EMAIL,
     subject: `Mensagem de ${name}`,
-    text: `Você recebeu uma mensagem de ${email}: ${message}`,
+    text: `
+Você recebeu uma nova mensagem de ${name} 
+
+email: (${email}):
+  
+Mensagem: ${message}
+
+------------------
+Por favor, não responda a este e-mail.
+      `,
   };
 
-  transporter.sendMail(mailOptions, function(error, info){
+  transporter.sendMail(mailOptions, function (error, info) {
     if (error) {
       console.log(error);
-      res.send('error');
+      res.send("error");
     } else {
-      console.log('Email enviado: ' + info.response);
-      res.send('success');
+      console.log("Email enviado: " + info.response);
+      res.send("success");
     }
   });
 }
 
-module.exports= {enviarEmail}
+module.exports = { enviarEmail };
