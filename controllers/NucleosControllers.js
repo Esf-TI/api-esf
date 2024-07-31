@@ -4,6 +4,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const { generateTokens, refreshAccessToken, authenticateToken } = require('../middlewares/authFunctions');
+const { createSubdomain } = require('../middlewares/domainFunctions');
 require('dotenv').config();
 
 const tokenSecret = process.env.JWT_SECRET;
@@ -53,8 +54,8 @@ const CreateNucleo = async (req, res) => {
     // Geração do hash da senha
     const hashedPassword = await bcrypt.hash(senha, 10); // O segundo argumento é o "salt rounds"
 
-    const inserirNucleo = 'INSERT INTO Nucleo (Nome, Email, Senha, Cidade, Descricao, DataFundacao, fotoCapa, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-    connection.query(inserirNucleo, [nomeNucleo, email, hashedPassword, cidade, descricao, dataFundacao, image, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram, "pending"], async (err, result) => {
+    const inserirNucleo = 'INSERT INTO Nucleo (Nome, Email, Senha, Cidade, Descricao, DataFundacao, fotoCapa, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram, status, subdominio) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    connection.query(inserirNucleo, [nomeNucleo, email, hashedPassword, cidade, descricao, dataFundacao, image, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram, "pending", null], async (err, result) => {
       if (err) {
         console.log(err);
         if (err.code === 'ER_DUP_ENTRY') {
@@ -94,6 +95,10 @@ const LoginNucleo = async (req, res) => {
       const senhaCorrespondente = await bcrypt.compare(senha, nucleo.Senha);
       if (!senhaCorrespondente) {
         return res.status(401).send('Senha incorreta');
+      }
+
+      if(nucleo.status != 'approved'){
+        return res.status(409).send("Nucleo nao aprovado")
       }
 
       const tokens = generateTokens(nucleo.ID,"nucleo");
@@ -209,23 +214,66 @@ const updateNucleoStatus = (req, res) => {
     return;
   }
 
-  // Atualizar o status do núcleo no banco de dados
-  const updateStatusQuery = 'UPDATE Nucleo SET status = ? WHERE ID = ?';
-  connection.query(updateStatusQuery, [novoStatus, nucleoId], (error, results) => {
+  // Obter o nome do núcleo com base no nucleoId
+  const getNucleoNomeQuery = 'SELECT Nome, subdominio FROM Nucleo WHERE ID = ?';
+  connection.query(getNucleoNomeQuery, [nucleoId], (error, results) => {
     if (error) {
-      console.error('Erro ao atualizar status do núcleo: ' + error.message);
-      res.status(500).send('Erro ao atualizar status do núcleo');
+      console.error('Erro ao obter nome do núcleo: ' + error.message);
+      res.status(500).send('Erro ao obter nome do núcleo');
       return;
     }
 
-    // Verificar se algum núcleo foi atualizado
-    if (results.affectedRows === 0) {
+    if (results.length === 0) {
       res.status(404).send('Núcleo não encontrado');
       return;
     }
 
-    console.log(`Status do núcleo ${nucleoId} atualizado para ${novoStatus}`);
-    res.status(200).send(`Status do núcleo ${nucleoId} atualizado para ${novoStatus}`);
+    const nucleoNome = results[0].Nome;
+    const subdominio = results[0].subdominio;
+
+    // Atualizar o status do núcleo no banco de dados
+    const updateStatusQuery = 'UPDATE Nucleo SET status = ? WHERE ID = ?';
+    connection.query(updateStatusQuery, [novoStatus, nucleoId], async (error, results) => {
+      if (error) {
+        console.error('Erro ao atualizar status do núcleo: ' + error.message);
+        res.status(500).send('Erro ao atualizar status do núcleo');
+        return;
+      }
+
+      // Verificar se algum núcleo foi atualizado
+      if (results.affectedRows === 0) {
+        res.status(404).send('Núcleo não encontrado');
+        return;
+      }
+
+      console.log(`Status do núcleo ${nucleoNome} atualizado para ${novoStatus}`);
+
+      // Verificar se o campo subdominio é null
+      if (novoStatus === 'approved' && subdominio === null) {
+        try {
+          const newSubdomain = nucleoNome.replace(/\s+/g, '').toLowerCase(); // Exemplo de como criar o subdomínio a partir do nome do núcleo
+          await createSubdomain(newSubdomain);
+
+          // Atualizar o campo subdominio no banco de dados
+          const updateSubdomainQuery = 'UPDATE Nucleo SET subdominio = ? WHERE ID = ?';
+          connection.query(updateSubdomainQuery, [newSubdomain, nucleoId], (error, results) => {
+            if (error) {
+              console.error('Erro ao atualizar subdomínio do núcleo: ' + error.message);
+              res.status(500).send('Erro ao atualizar subdomínio do núcleo');
+              return;
+            }
+
+            console.log(`Subdomínio do núcleo ${nucleoNome} atualizado para ${newSubdomain}`);
+            res.status(200).send(`Status do núcleo ${nucleoNome} atualizado para ${novoStatus} e subdomínio criado como ${newSubdomain}`);
+          });
+        } catch (error) {
+          console.error('Erro ao criar subdomínio:', error.message);
+          res.status(500).send('Erro ao criar subdomínio');
+        }
+      } else {
+        res.status(200).send(`Status do núcleo ${nucleoNome} atualizado para ${novoStatus}`);
+      }
+    });
   });
 };
 

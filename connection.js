@@ -4,7 +4,7 @@ const mysql = require('mysql');
 const connection = mysql.createConnection({
     host: 'localhost',
     user: 'root',
-    password: '',
+    password: 'root',
     database: 'esf'
 });
 
@@ -68,6 +68,7 @@ connection.connect((err) => {
                 Email VARCHAR(255),
                 Senha VARCHAR(255),
                 Cidade VARCHAR(255),
+                subdominio VARCHAR(255),
                 Descricao TEXT,
                 DataFundacao DATE,
                 fotoCapa VARCHAR(255),
