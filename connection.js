@@ -1,68 +1,71 @@
 // arquivo database.js
-const mysql = require('mysql');
+const mysql = require("mysql");
 
 const connection = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: 'root',
-    database: 'esf'
+  host: "localhost",
+  user: "root",
+  password: "root",
+  database: "esf",
 });
 
 // const connection = mysql.createConnection({
-//     host: 'esf.org.br',
-//     user: 'esfor8190_dev',
-//     password: '123456789ESF.202324',
-//     database: 'esfor8190_bancoplataforma'
+//   host: "esf.org.br",
+//   user: "esfor8190_dev",
+//   password: "123456789ESF.202324",
+//   database: "esfor8190_bancoplataforma",
 // });
 
 connection.connect((err) => {
+  if (err) {
+    console.error("Erro ao conectar ao banco de dados: " + err.stack);
+    return;
+  }
+  console.log("Conexão bem-sucedida ao banco de dados MySQL!");
+
+  // Verificar se o banco de dados existe e, se não existir, criá-lo
+  connection.query("CREATE DATABASE IF NOT EXISTS esf", (err, result) => {
     if (err) {
-        console.error('Erro ao conectar ao banco de dados: ' + err.stack);
-        return;
+      console.error("Erro ao criar o banco de dados: " + err.stack);
+      return;
     }
-    console.log('Conexão bem-sucedida ao banco de dados MySQL!');
+    console.log("Banco de dados criado com sucesso ou já existente!");
 
-    // Verificar se o banco de dados existe e, se não existir, criá-lo
-    connection.query("CREATE DATABASE IF NOT EXISTS esf", (err, result) => {
-        if (err) {
-            console.error('Erro ao criar o banco de dados: ' + err.stack);
-            return;
-        }
-        console.log('Banco de dados criado com sucesso ou já existente!');
+    // Usar o banco de dados esf
+    connection.query("USE esf", (err, result) => {
+      if (err) {
+        console.error("Erro ao selecionar o banco de dados: " + err.stack);
+        return;
+      }
+      console.log("Banco de dados selecionado com sucesso!");
 
-        // Usar o banco de dados esf
-        connection.query("USE esf", (err, result) => {
-            if (err) {
-                console.error('Erro ao selecionar o banco de dados: ' + err.stack);
-                return;
-            }
-            console.log('Banco de dados selecionado com sucesso!');
-
-            connection.query(`CREATE TABLE IF NOT EXISTS Admin (
+      connection.query(`CREATE TABLE IF NOT EXISTS Admin (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 email VARCHAR(255) NOT NULL UNIQUE,
                 password VARCHAR(255) NOT NULL
-            )`), (err, result) => {
-                if (err) {
-                    console.error('Erro ao criar a tabela Admin: ' + err.stack);
-                    return;
-                }
-            }
+            )`),
+        (err, result) => {
+          if (err) {
+            console.error("Erro ao criar a tabela Admin: " + err.stack);
+            return;
+          }
+        };
 
-            connection.query(`CREATE TABLE IF NOT EXISTS Blog (
+      connection.query(`CREATE TABLE IF NOT EXISTS Blog (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 title VARCHAR(255),
                 description LONGTEXT,
                 image VARCHAR(255)
-            )`), (err, result) => {
-                if (err) {
-                    console.error('Erro ao criar a tabela Blog: ' + err.stack);
-                    return;
-                }
-            }
+            )`),
+        (err, result) => {
+          if (err) {
+            console.error("Erro ao criar a tabela Blog: " + err.stack);
+            return;
+          }
+        };
 
-            // Criar tabela Nucleo
-            connection.query(`CREATE TABLE IF NOT EXISTS Nucleo (
+      // Criar tabela Nucleo
+      connection.query(
+        `CREATE TABLE IF NOT EXISTS Nucleo (
                 ID INT AUTO_INCREMENT PRIMARY KEY,
                 Nome VARCHAR(255),
                 Email VARCHAR(255),
@@ -79,15 +82,17 @@ connection.connect((err) => {
                 linkInstagram VARCHAR(255),
                 status VARCHAR(255),
                 Token VARCHAR(255)
-            )`, (err, result) => {
-                if (err) {
-                    console.error('Erro ao criar a tabela Nucleo: ' + err.stack);
-                    return;
-                }
-                console.log('Tabela Nucleo criada com sucesso ou já existente!');
-                
-                // Criar tabela Projetos
-                connection.query(`CREATE TABLE IF NOT EXISTS Projetos (
+            )`,
+        (err, result) => {
+          if (err) {
+            console.error("Erro ao criar a tabela Nucleo: " + err.stack);
+            return;
+          }
+          console.log("Tabela Nucleo criada com sucesso ou já existente!");
+
+          // Criar tabela Projetos
+          connection.query(
+            `CREATE TABLE IF NOT EXISTS Projetos (
                     ID INT AUTO_INCREMENT PRIMARY KEY,
                     Nome VARCHAR(255),
                     NucleoResponsavel INT,
@@ -104,15 +109,20 @@ connection.connect((err) => {
                     foto5 VARCHAR(255),
                     status VARCHAR(255),
                     FOREIGN KEY (NucleoResponsavel) REFERENCES Nucleo(ID)
-                )`, (err, result) => {
-                    if (err) {
-                        console.error('Erro ao criar a tabela Projetos: ' + err.stack);
-                        return;
-                    }
-                    console.log('Tabela Projetos criada com sucesso ou já existente!');
-                });
+                )`,
+            (err, result) => {
+              if (err) {
+                console.error("Erro ao criar a tabela Projetos: " + err.stack);
+                return;
+              }
+              console.log(
+                "Tabela Projetos criada com sucesso ou já existente!"
+              );
+            }
+          );
 
-                connection.query(`
+          connection.query(
+            `
                             CREATE TABLE IF NOT EXISTS AdminTokens (
                                 id INT AUTO_INCREMENT PRIMARY KEY,
                                 adminId INT,
@@ -122,15 +132,20 @@ connection.connect((err) => {
                                 refreshTokenExpires DATETIME,
                                 FOREIGN KEY (adminId) REFERENCES Admin(id)
                             )
-                        `, (err, result) => {
-                            if (err) {
-                                console.error('Erro ao criar a tabela AdminTokens: ' + err.stack);
-                                return;
-                            }
-                            console.log('Tabela AdminTokens criada com sucesso!');
-                        });
+                        `,
+            (err, result) => {
+              if (err) {
+                console.error(
+                  "Erro ao criar a tabela AdminTokens: " + err.stack
+                );
+                return;
+              }
+              console.log("Tabela AdminTokens criada com sucesso!");
+            }
+          );
 
-                        connection.query(`
+          connection.query(
+            `
                             CREATE TABLE IF NOT EXISTS NucleoTokens (
                                 id INT AUTO_INCREMENT PRIMARY KEY,
                                 nucleoId INT,
@@ -140,18 +155,21 @@ connection.connect((err) => {
                                 refreshTokenExpires DATETIME,
                                 FOREIGN KEY (nucleoId) REFERENCES Nucleo(ID)
                             )
-                        `, (err, result) => {
-                            if (err) {
-                                console.error('Erro ao criar a tabela NucleoTokens: ' + err.stack);
-                                return;
-                            }
-                            console.log('Tabela NucleoTokens criada com sucesso!');
-                        });
-            });
-        });
+                        `,
+            (err, result) => {
+              if (err) {
+                console.error(
+                  "Erro ao criar a tabela NucleoTokens: " + err.stack
+                );
+                return;
+              }
+              console.log("Tabela NucleoTokens criada com sucesso!");
+            }
+          );
+        }
+      );
     });
+  });
 });
-
-
 
 module.exports = connection;

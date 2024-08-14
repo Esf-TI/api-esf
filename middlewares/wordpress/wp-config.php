@@ -20,10 +20,10 @@
 
 // ** Database settings - You can get this info from your web host ** //
 /** The name of the database for WordPress */
-define( 'DB_NAME', 'wp_database_ewqeqw' );
+define( 'DB_NAME', 'newtoo35_wp_database_nucleopelotas' );
 
 /** Database username */
-define( 'DB_USER', 'wp_ewqeqw' );
+define( 'DB_USER', 'newtoo35_wp_nucleopelotas' );
 
 /** Database password */
 define( 'DB_PASSWORD', '314159265358979Mafra' );
