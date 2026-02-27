@@ -1,15 +1,36 @@
 const connection = require("../connection")
-const BUCKET = "engenheiros-sem-fronteiras.appspot.com"
+const { logAdminAction } = require("./AdminController")
 
-const validateBlogData = (data) => {
+const validateBlogData = (data, isUpdate = false) => {
   const errors = []
 
-  if (!data.title || data.title.trim().length < 5) {
-    errors.push("Título deve ter pelo menos 5 caracteres")
+  if (!isUpdate || data.title) {
+    if (!data.title || data.title.trim().length < 5) {
+      errors.push("Título deve ter pelo menos 5 caracteres")
+    }
+    if (data.title && data.title.length > 200) {
+      errors.push("Título não pode exceder 200 caracteres")
+    }
   }
 
-  if (!data.description || data.description.trim().length < 20) {
-    errors.push("Descrição deve ter pelo menos 20 caracteres")
+  if (!isUpdate || data.description) {
+    if (!data.description || data.description.trim().length < 20) {
+      errors.push("Descrição deve ter pelo menos 20 caracteres")
+    }
+  }
+
+  if (!isUpdate || data.content) {
+    if (!data.content || data.content.trim().length < 50) {
+      errors.push("Conteúdo deve ter pelo menos 50 caracteres")
+    }
+  }
+
+  if (data.author && data.author.length > 100) {
+    errors.push("Nome do autor não pode exceder 100 caracteres")
+  }
+
+  if (data.status && !["published", "draft", "archived"].includes(data.status)) {
+    errors.push("Status inválido. Use: published, draft ou archived")
   }
 
   return errors
@@ -17,11 +38,18 @@ const validateBlogData = (data) => {
 
 const CreateBlog = async (req, res) => {
   try {
-    const { title, description, author, tags, status = "published" } = req.body
+    const { title, description, content, tags, status = "draft" } = req.body
     const upload = req.file
-    const adminId = req.admin?.id
+    const adminId = req.admin?.id || null
 
-    const validationErrors = validateBlogData(req.body)
+    // Validação - status pode ser draft, published ou archived
+    let finalStatus = status || "draft"
+    if (!["draft", "published", "archived"].includes(finalStatus)) {
+      finalStatus = "draft"
+    }
+
+    // Validation
+    const validationErrors = validateBlogData({ ...req.body, status: finalStatus })
     if (validationErrors.length > 0) {
       return res.status(400).json({
         success: false,
@@ -37,45 +65,70 @@ const CreateBlog = async (req, res) => {
       })
     }
 
-    const image = `https://storage.googleapis.com/${BUCKET}/${upload.filename}`
+    // URL local do arquivo (semelhante ao padrão de Anais)
+    const image = `/uploads/blog/${upload.filename}`
     const slug = title
       .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "")
 
-    const inserirBlog = `
-      INSERT INTO Blog (title, description, image, author, tags, status, slug, createdBy, createdAt) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
-    `
-
-    connection.query(inserirBlog, [title, description, image, author, tags, status, slug, adminId], (err, result) => {
+    // Check if slug already exists
+    const checkSlugSql = "SELECT id FROM Blog WHERE slug = ?"
+    connection.query(checkSlugSql, [slug], (err, existingSlug) => {
       if (err) {
-        console.error("Error creating blog post:", err)
+        console.error("Error checking slug:", err)
         return res.status(500).json({
           success: false,
-          message: "Erro ao criar post do blog",
+          message: "Erro ao verificar slug",
         })
       }
 
-      if (adminId) {
-        const { logAdminAction } = require("./AdminController")
-        logAdminAction(adminId, "BLOG_POST_CREATED", {
-          postId: result.insertId,
-          title,
-          author,
-        })
-      }
+      const finalSlug = existingSlug.length > 0 ? `${slug}-${Date.now()}` : slug
 
-      res.status(201).json({
-        success: true,
-        message: "Post criado com sucesso",
-        data: {
-          id: result.insertId,
-          title,
-          slug,
-          status,
+      const tagsValue = tags && tags.trim() !== "" ? tags : null
+
+      const inserirBlog = `
+        INSERT INTO Blog (title, description, content, image, author_id, tags, status, slug, created_at, updated_at) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+      `
+
+      connection.query(
+        inserirBlog,
+        [title, description, content, image, adminId, tagsValue, finalStatus, finalSlug],
+        (err, result) => {
+          if (err) {
+            console.error("Error creating blog post:", err)
+            return res.status(500).json({
+              success: false,
+              message: "Erro ao criar post do blog",
+              error: process.env.NODE_ENV === "development" ? err.message : undefined,
+            })
+          }
+
+          if (adminId) {
+            logAdminAction(adminId, "BLOG_POST_CREATED", {
+              postId: result.insertId,
+              title,
+              slug: finalSlug,
+              status: finalStatus,
+            })
+          }
+
+          res.status(201).json({
+            success: true,
+            message: "Post criado com sucesso",
+            data: {
+              id: result.insertId,
+              title,
+              slug: finalSlug,
+              status: finalStatus,
+              image,
+            },
+          })
         },
-      })
+      )
     })
   } catch (error) {
     console.error("Error in CreateBlog:", error)
@@ -88,31 +141,27 @@ const CreateBlog = async (req, res) => {
 
 const returnAllBlog = (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 10,
-      status = "published",
-      search,
-      author,
-      sortBy = "createdAt",
-      sortOrder = "DESC",
-    } = req.query
+    const { page = 1, limit = 10, status, search, sortBy = "created_at", sortOrder = "DESC" } = req.query
 
     const offset = (page - 1) * limit
-    const whereConditions = ["status = ?"]
-    const queryParams = [status]
+    const whereConditions = []
+    const queryParams = []
+
+    if (status) {
+      whereConditions.push("status = ?")
+      queryParams.push(status)
+    }
 
     if (search) {
-      whereConditions.push("(title LIKE ? OR description LIKE ?)")
-      queryParams.push(`%${search}%`, `%${search}%`)
+      whereConditions.push("(title LIKE ? OR description LIKE ? OR tags LIKE ?)")
+      queryParams.push(`%${search}%`, `%${search}%`, `%${search}%`)
     }
 
-    if (author) {
-      whereConditions.push("author LIKE ?")
-      queryParams.push(`%${author}%`)
-    }
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : ""
 
-    const whereClause = `WHERE ${whereConditions.join(" AND ")}`
+    const validSortColumns = ["created_at", "updated_at", "title", "id"]
+    const finalSortBy = validSortColumns.includes(sortBy) ? sortBy : "created_at"
+    const finalSortOrder = sortOrder.toUpperCase() === "ASC" ? "ASC" : "DESC"
 
     // Count total
     const countSql = `SELECT COUNT(*) as total FROM Blog ${whereClause}`
@@ -130,11 +179,13 @@ const returnAllBlog = (req, res) => {
 
       // Get posts
       const sql = `
-        SELECT *, 
-        DATE_FORMAT(createdAt, '%d/%m/%Y %H:%i') as formattedDate
+        SELECT 
+          id, title, description, content, image, author_id, tags, status, slug,
+          DATE_FORMAT(created_at, '%d/%m/%Y %H:%i') as formattedDate,
+          created_at, updated_at
         FROM Blog 
         ${whereClause}
-        ORDER BY ${sortBy} ${sortOrder}
+        ORDER BY ${finalSortBy} ${finalSortOrder}
         LIMIT ? OFFSET ?
       `
 
@@ -158,6 +209,7 @@ const returnAllBlog = (req, res) => {
               limit: Number.parseInt(limit),
               total,
               totalPages: Math.ceil(total / limit),
+              hasMore: offset + results.length < total,
             },
           },
         })
@@ -173,108 +225,255 @@ const returnAllBlog = (req, res) => {
 }
 
 const returnBlogById = (req, res) => {
-  const { id } = req.params
-  const selectBlogQuery = "SELECT * FROM Blog WHERE id = ?"
+  try {
+    const { id } = req.params
 
-  connection.query(selectBlogQuery, [id], (err, rows) => {
-    if (err) {
-      console.error("Erro ao buscar blog por ID:", err)
-      return res.status(500).send("Erro interno do servidor")
+    if (!id || isNaN(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "ID inválido",
+      })
     }
 
-    // Verifica se o blog foi encontrado
-    if (rows.length === 0) {
-      return res.status(404).send("Blog não encontrado")
-    }
+    const sql = "SELECT * FROM Blog WHERE id = ?"
 
-    // Retorna as informações do blog encontrado
-    res.status(200).json(rows[0])
-  })
+    connection.query(sql, [id], (err, rows) => {
+      if (err) {
+        console.error("Erro ao buscar blog por ID:", err)
+        return res.status(500).json({
+          success: false,
+          message: "Erro interno do servidor",
+        })
+      }
+
+      if (rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Blog não encontrado",
+        })
+      }
+
+      res.json({
+        success: true,
+        data: rows[0],
+      })
+    })
+  } catch (error) {
+    console.error("Error in returnBlogById:", error)
+    res.status(500).json({
+      success: false,
+      message: "Erro interno do servidor",
+    })
+  }
 }
 
 const updateBlog = (req, res) => {
-  const { id } = req.params
-  const { title, description } = req.body
-  const upload = req.file
-  console.log(upload)
-  // Verifica se o ID do blog é fornecido
-  if (!id) {
-    return res.status(400).send("ID do blog não fornecido")
-  }
+  try {
+    const { id } = req.params
+    const { title, description, content, tags, status } = req.body
+    const upload = req.file
+    const adminId = req.admin?.id || null
 
-  // Verifica se pelo menos um dos campos (título, descrição, imagem) foi fornecido
-  if (!title && !description && !upload) {
-    return res.status(400).send("Por favor, forneça pelo menos um dos campos: título, descrição ou imagem")
-  }
-
-  // Constrói a consulta de atualização com base nos campos fornecidos
-  let updateBlogQuery = "UPDATE Blog SET"
-  const queryParams = []
-
-  if (title) {
-    updateBlogQuery += " title = ?,"
-    queryParams.push(title)
-  }
-
-  if (description) {
-    updateBlogQuery += " description = ?,"
-    queryParams.push(description)
-  }
-
-  if (upload && upload.filename) {
-    const image = `https://storage.googleapis.com/${BUCKET}/${upload.filename}`
-    updateBlogQuery += " image = ?,"
-    queryParams.push(image)
-  }
-
-  // Remove a última vírgula da consulta de atualização
-  updateBlogQuery = updateBlogQuery.slice(0, -1)
-
-  updateBlogQuery += " WHERE id = ?"
-  queryParams.push(id)
-
-  // Executa a consulta de atualização
-  connection.query(updateBlogQuery, queryParams, (err, result) => {
-    if (err) {
-      console.error("Erro ao atualizar o blog:", err)
-      return res.status(500).send("Erro interno do servidor")
+    if (!id || isNaN(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "ID inválido",
+      })
     }
 
-    // Verifica se o blog foi atualizado com sucesso
-    if (result.affectedRows === 0) {
-      return res.status(404).send("Blog não encontrado")
+    // Permitir atualizar apenas um campo de cada vez
+    if (!title && !description && !content && !upload && !tags && status === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "Por favor, forneça pelo menos um campo para atualizar",
+      })
     }
 
-    // Retorna uma mensagem de sucesso
-    res.status(200).send("Blog atualizado com sucesso")
-  })
+    const validationErrors = validateBlogData(req.body, true)
+    if (validationErrors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Dados inválidos",
+        errors: validationErrors,
+      })
+    }
+
+    let updateBlogQuery = "UPDATE Blog SET"
+    const queryParams = []
+
+    if (title) {
+      updateBlogQuery += " title = ?,"
+      queryParams.push(title)
+    }
+
+    if (description) {
+      updateBlogQuery += " description = ?,"
+      queryParams.push(description)
+    }
+
+    if (content) {
+      updateBlogQuery += " content = ?,"
+      queryParams.push(content)
+    }
+
+    if (tags !== undefined) {
+      const tagsValue = tags && tags.trim() !== "" ? tags : null
+      updateBlogQuery += " tags = ?,"
+      queryParams.push(tagsValue)
+    }
+
+    // Fixo: status deve ser validado e atualizado corretamente
+    if (status !== undefined && status !== null && status !== "") {
+      if (!["published", "draft", "archived"].includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: "Status inválido. Use: published, draft ou archived",
+        })
+      }
+      updateBlogQuery += " status = ?,"
+      queryParams.push(status)
+    }
+
+    if (upload && upload.filename) {
+      // URL local do arquivo (semelhante ao padrão de Anais)
+      const image = `/uploads/blog/${upload.filename}`
+      updateBlogQuery += " image = ?,"
+      queryParams.push(image)
+    }
+
+    updateBlogQuery += " updated_at = NOW()"
+    updateBlogQuery += " WHERE id = ?"
+    queryParams.push(id)
+
+    connection.query(updateBlogQuery, queryParams, (err, result) => {
+      if (err) {
+        console.error("Erro ao atualizar o blog:", err)
+        return res.status(500).json({
+          success: false,
+          message: "Erro interno do servidor",
+        })
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Blog não encontrado",
+        })
+      }
+
+      if (adminId) {
+        logAdminAction(adminId, "BLOG_POST_UPDATED", { postId: id, fields: Object.keys(req.body) })
+      }
+
+      res.json({
+        success: true,
+        message: "Blog atualizado com sucesso",
+        data: { id, ...req.body },
+      })
+    })
+  } catch (error) {
+    console.error("Error in updateBlog:", error)
+    res.status(500).json({
+      success: false,
+      message: "Erro interno do servidor",
+    })
+  }
 }
 
 const deleteBlog = (req, res) => {
-  const { id } = req.params
+  try {
+    const { id } = req.params
+    const adminId = req.admin?.id
 
-  // Verifica se o ID do post é fornecido
-  if (!id) {
-    return res.status(400).send("ID do post não fornecido")
+    if (!id || isNaN(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "ID inválido",
+      })
+    }
+
+    const archiveQuery = "UPDATE Blog SET status = 'archived', updated_at = NOW() WHERE id = ?"
+
+    connection.query(archiveQuery, [id], (err, result) => {
+      if (err) {
+        console.error("Erro ao arquivar o post:", err)
+        return res.status(500).json({
+          success: false,
+          message: "Erro interno do servidor",
+        })
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Post não encontrado",
+        })
+      }
+
+      if (adminId) {
+        logAdminAction(adminId, "BLOG_POST_ARCHIVED", { postId: id })
+      }
+
+      res.json({
+        success: true,
+        message: "Post arquivado com sucesso",
+      })
+    })
+  } catch (error) {
+    console.error("Error in deleteBlog:", error)
+    res.status(500).json({
+      success: false,
+      message: "Erro interno do servidor",
+    })
   }
+}
 
-  // Query para deletar o post do banco de dados
-  const deletePostQuery = "DELETE FROM Blog WHERE id = ?"
+const permanentDeleteBlog = (req, res) => {
+  try {
+    const { id } = req.params
+    const adminId = req.admin?.id
 
-  connection.query(deletePostQuery, [id], (err, result) => {
-    if (err) {
-      console.error("Erro ao deletar o post:", err)
-      return res.status(500).send("Erro interno do servidor")
+    if (!id || isNaN(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "ID inválido",
+      })
     }
 
-    // Verifica se o post foi deletado com sucesso
-    if (result.affectedRows === 0) {
-      return res.status(404).send("Post não encontrado")
-    }
+    const deleteQuery = "DELETE FROM Blog WHERE id = ?"
 
-    // Retorna uma mensagem de sucesso
-    res.status(200).send("Post deletado com sucesso")
-  })
+    connection.query(deleteQuery, [id], (err, result) => {
+      if (err) {
+        console.error("Erro ao deletar o post:", err)
+        return res.status(500).json({
+          success: false,
+          message: "Erro interno do servidor",
+        })
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Post não encontrado",
+        })
+      }
+
+      if (adminId) {
+        logAdminAction(adminId, "BLOG_POST_DELETED_PERMANENTLY", { postId: id })
+      }
+
+      res.json({
+        success: true,
+        message: "Post deletado permanentemente",
+      })
+    })
+  } catch (error) {
+    console.error("Error in permanentDeleteBlog:", error)
+    res.status(500).json({
+      success: false,
+      message: "Erro interno do servidor",
+    })
+  }
 }
 
 module.exports = {
@@ -282,5 +481,6 @@ module.exports = {
   returnAllBlog,
   updateBlog,
   deleteBlog,
+  permanentDeleteBlog,
   returnBlogById,
 }

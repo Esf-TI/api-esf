@@ -23,17 +23,19 @@ router.post("/login", NucleosControllers.LoginNucleo)
 //RETORNAR TODOS OS NÚCLEOS ( PARA ADMIN )
 router.get("/nucleos", NucleosControllers.GetAllNucleos)
 
-//RETORNAR  UM NUCLEO ESPECÍFICO
-router.get("/nucleos/:id", NucleosControllers.GetNucleoById)
-
 //RETORNAR APENAS OS NÚCLEOS APROVADOS
 router.get("/nucleosaprovados", NucleosControllers.GetNucleosAprovados)
+
+//RETORNAR  UM NUCLEO ESPECÍFICO
+router.get("/nucleos/:id", NucleosControllers.GetNucleoById)
 
 //ROTA PARA ATUALIZAR O STATUS DE UM NÚCLEO ( VALORES POSSÍVEIS: pending, reproved, approved)
 router.patch("/status/:id", NucleosControllers.updateNucleoStatus)
 
 //ROTA PARA EDITAR QUALQUER CAMPO DO BANCO DE DADOS DO NÚCLEO ( EDIÇÃO DO PRÓPRIO NÚCLEO )
 router.patch("/nucleos/:id", NucleosControllers.patchNucleo)
+
+router.put("/nucleos/:id", NucleosControllers.putNucleoWithoutFile)
 
 router.delete("/nucleos/:id", NucleosControllers.deleteNucleo)
 

@@ -1,19 +1,28 @@
-// arquivo database.js
 const mysql = require("mysql")
 
- const connection = mysql.createConnection({
-  host: "localhost",
-  user: "root",
-  password: "",
-  database: "esf",
-})
+// Detectar ambiente (development ou production)
+const isDevelopment = process.env.NODE_ENV === "development" || !process.env.NODE_ENV
 
-//const connection = mysql.createConnection({
- // host: "esf.org.br",
-  // user: "esfor8190_dev",
-  // password: "123456789ESF.202324",
-  // database: "esfor8190_bancoplataforma",
- //});
+// Configurações de banco de dados baseadas no ambiente
+const dbConfig = isDevelopment
+  ? {
+      // Configuração de DESENVOLVIMENTO (localhost)
+      host: process.env.DB_HOST || "localhost",
+      user: process.env.DB_USER || "root",
+      password: process.env.DB_PASSWORD || "",
+      database: process.env.DB_NAME || "esf",
+    }
+  : {
+      // Configuração de PRODUÇÃO (servidor remoto)
+      host: process.env.DB_HOST || "esf.org.br",
+      user: process.env.DB_USER || "esfor8190_dev",
+      password: process.env.DB_PASSWORD || "123456789ESF.202324",
+      database: process.env.DB_NAME || "esfor8190_bancoplataforma",
+    }
+
+console.log(`🔌 Conectando ao banco de dados em modo: ${isDevelopment ? "DESENVOLVIMENTO" : "PRODUÇÃO"}`)
+
+const connection = mysql.createConnection(dbConfig)
 
 connection.connect((err) => {
   if (err) {
@@ -23,15 +32,15 @@ connection.connect((err) => {
   console.log("Conexão bem-sucedida ao banco de dados MySQL!")
 
   // Verificar se o banco de dados existe e, se não existir, criá-lo
-  connection.query("CREATE DATABASE IF NOT EXISTS esfor8190_bancoplataforma", (err, result) => {
+  connection.query(`CREATE DATABASE IF NOT EXISTS ${dbConfig.database}`, (err, result) => {
     if (err) {
       console.error("Erro ao criar o banco de dados: " + err.stack)
       return
     }
     console.log("Banco de dados criado com sucesso ou já existente!")
 
-    // Usar o banco de dados esf
-    connection.query("USE esfor8190_bancoplataforma", (err, result) => {
+    // Usar o banco de dados
+    connection.query(`USE ${dbConfig.database}`, (err, result) => {
       if (err) {
         console.error("Erro ao selecionar o banco de dados: " + err.stack)
         return
@@ -106,6 +115,9 @@ connection.connect((err) => {
                 Descricao TEXT,
                 DataFundacao DATE,
                 fotoCapa VARCHAR(255),
+                foto1 VARCHAR(255),
+                foto2 VARCHAR(255),
+                foto3 VARCHAR(255),
                 linkDoacao VARCHAR(255),
                 linkSite VARCHAR(255),
                 linkLinkedin VARCHAR(255),
@@ -216,10 +228,8 @@ connection.connect((err) => {
             },
           )
 
-          // Existing code for AdminTokens
           connection.query(
-            `
-                            CREATE TABLE IF NOT EXISTS AdminTokens (
+            `CREATE TABLE IF NOT EXISTS AdminTokens (
                                 id INT AUTO_INCREMENT PRIMARY KEY,
                                 adminId INT,
                                 accessToken VARCHAR(255),
@@ -229,8 +239,7 @@ connection.connect((err) => {
                                 createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                                 updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                                 FOREIGN KEY (adminId) REFERENCES Admin(id)
-                            )
-                        `,
+                            )`,
             (err, result) => {
               if (err) {
                 console.error("Erro ao criar a tabela AdminTokens: " + err.stack)
@@ -240,10 +249,8 @@ connection.connect((err) => {
             },
           )
 
-          // Existing code for NucleoTokens
           connection.query(
-            `
-                            CREATE TABLE IF NOT EXISTS NucleoTokens (
+            `CREATE TABLE IF NOT EXISTS NucleoTokens (
                                 id INT AUTO_INCREMENT PRIMARY KEY,
                                 nucleoId INT,
                                 accessToken VARCHAR(255),
@@ -252,8 +259,7 @@ connection.connect((err) => {
                                 refreshTokenExpires DATETIME,
                                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                                 FOREIGN KEY (nucleoId) REFERENCES Nucleo(ID)
-                            )
-                        `,
+                            )`,
             (err, result) => {
               if (err) {
                 console.error("Erro ao criar a tabela NucleoTokens: " + err.stack)
@@ -263,7 +269,6 @@ connection.connect((err) => {
             },
           )
 
-          // New code for AdminLogs
           connection.query(
             `CREATE TABLE IF NOT EXISTS AdminLogs (
                             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -282,6 +287,45 @@ connection.connect((err) => {
                 return
               }
               console.log("Tabela AdminLogs criada com sucesso!")
+            },
+          )
+
+          connection.query(
+            `CREATE TABLE IF NOT EXISTS Anais (
+                            id INT AUTO_INCREMENT PRIMARY KEY,
+                            title VARCHAR(255) NOT NULL,
+                            description TEXT,
+                            year INT NOT NULL,
+                            event_name VARCHAR(255),
+                            pdf_url VARCHAR(500) NOT NULL,
+                            cover_image_url VARCHAR(500),
+                            authors VARCHAR(500),
+                            pages INT,
+                            isbn VARCHAR(50),
+                            doi VARCHAR(100),
+                            keywords JSON,
+                            category ENUM('technical', 'research', 'workshop', 'other') DEFAULT 'technical',
+                            status ENUM('active', 'archived', 'deleted') DEFAULT 'active',
+                            downloads INT DEFAULT 0,
+                            views INT DEFAULT 0,
+                            featured BOOLEAN DEFAULT FALSE,
+                            created_by INT,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                            published_at DATETIME NULL,
+                            FOREIGN KEY (created_by) REFERENCES Admin(id),
+                            INDEX idx_year (year),
+                            INDEX idx_status (status),
+                            INDEX idx_category (category),
+                            INDEX idx_featured (featured),
+                            INDEX idx_created_at (created_at)
+                        )`,
+            (err, result) => {
+              if (err) {
+                console.error("Erro ao criar a tabela Anais: " + err.stack)
+                return
+              }
+              console.log("Tabela Anais criada com sucesso!")
             },
           )
         },

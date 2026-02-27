@@ -27,5 +27,6 @@ router.get("/nucleos", authenticateAdmin, nucleosController.GetAllNucleos)
 router.get("/nucleos/:id", authenticateAdmin, nucleosController.GetNucleoById)
 router.patch("/nucleos/:id/status", authenticateAdmin, adminController.updateNucleoStatus)
 router.post("/nucleos", authenticateAdmin, nucleosController.CreateNucleoByAdmin)
+router.put("/nucleos/:id", authenticateAdmin, nucleosController.putNucleoWithoutFile)
 
 module.exports = router

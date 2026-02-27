@@ -23,16 +23,24 @@ const verificarToken = require("../middlewares/verifyToken")
 //CRIAR PROJETO ( PRECISA DO ID DO NÚCLEO QUE IRÁ RETORNAR APÓS O LOGIN)
 router.post("/projetos", Multer, uploadImage, ProjetcsControllers.createProject)
 
+//CRIAR PROJETO SEM UPLOAD
+router.post("/projetos1", ProjetcsControllers.createProjectDentro)
+
 //RETORNAR TODOS OS PROJETOS
 router.get("/projetos", ProjetcsControllers.returnProjects)
 
 //RETORNAR TODOS PROJETOS DE UM NUCLEO
-router.get("/projetos/:nucleoId", ProjetcsControllers.returnProjectsNucleo)
+
+router.get("/projetos/nucleos/:nucleoId", ProjetcsControllers.returnProjectsNucleo)
+
 //RETORNAR UM PROJETO ESPECÍFICO
 router.get("/projetos/:id", ProjetcsControllers.returnProjectById)
 
 //ALTERAR TODOS OS CAMPOS DE UM PROJETO
 router.put("/projetos/:id", Multer, uploadProjects, ProjetcsControllers.editProjectById)
+
+//ALTERAR TODOS OS CAMPOS DE UM PROJETO
+router.put("/projetosAlterar/:id", ProjetcsControllers.editProjectByIdWithout)
 
 //ALTERAR SÓ UM CAMPO ESPECÍFICO DO PROJETO
 router.patch("/projetosedit/:id", photo, uploadImage, ProjetcsControllers.patchProject)

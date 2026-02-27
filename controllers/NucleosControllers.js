@@ -11,7 +11,7 @@ const tokenSecret = process.env.JWT_SECRET
 
 const validateNucleoData = (data) => {
   const errors = []
-  const requiredFields = ["email", "senha", "nomeNucleo", "descricao", "cidade", "dataFundacao"]
+  const requiredFields = ["email", "senha", "nomeNucleo", "descricao", "cidade", "estado", "dataFundacao"]
 
   requiredFields.forEach((field) => {
     if (!data[field] || data[field].toString().trim() === "") {
@@ -41,16 +41,62 @@ const deleteNucleo = async (req, res) => {
   }
 
   try {
-    const deleteQuery = "DELETE FROM Nucleo WHERE ID = ?"
-    connection.query(deleteQuery, [id], (err, result) => {
-      if (err) {
-        console.error(err)
-        return res.status(500).send("Erro ao deletar o núcleo")
+    connection.beginTransaction((txErr) => {
+      if (txErr) {
+        console.error(txErr)
+        return res.status(500).send("Erro ao iniciar transação")
       }
-      if (result.affectedRows === 0) {
-        return res.status(404).send("Núcleo não encontrado")
-      }
-      return res.status(200).send("Núcleo deletado com sucesso")
+
+      const deleteTokensQuery = "DELETE FROM NucleoTokens WHERE nucleoId = ?"
+      const deleteProjectsQuery = "DELETE FROM Projetos WHERE NucleoResponsavel = ?"
+      const deleteNucleoQuery = "DELETE FROM Nucleo WHERE ID = ?"
+
+      connection.query(deleteTokensQuery, [id], (tokensErr) => {
+        if (tokensErr) {
+          return connection.rollback(() => {
+            console.error(tokensErr)
+            res.status(500).send("Erro ao deletar tokens do núcleo")
+          })
+        }
+
+        connection.query(deleteProjectsQuery, [id], (projectsErr) => {
+          if (projectsErr) {
+            return connection.rollback(() => {
+              console.error(projectsErr)
+              res.status(500).send("Erro ao deletar projetos do núcleo")
+            })
+          }
+
+          connection.query(deleteNucleoQuery, [id], (nucleoErr, result) => {
+            if (nucleoErr) {
+              return connection.rollback(() => {
+                console.error(nucleoErr)
+                if (nucleoErr.code === "ER_ROW_IS_REFERENCED_2") {
+                  res.status(409).send("Núcleo possui dependências e não pode ser removido.")
+                } else {
+                  res.status(500).send("Erro ao deletar o núcleo")
+                }
+              })
+            }
+
+            if (result.affectedRows === 0) {
+              return connection.rollback(() => {
+                res.status(404).send("Núcleo não encontrado")
+              })
+            }
+
+            connection.commit((commitErr) => {
+              if (commitErr) {
+                return connection.rollback(() => {
+                  console.error(commitErr)
+                  res.status(500).send("Erro ao finalizar transação")
+                })
+              }
+              return res.status(200).send("Núcleo deletado com sucesso")
+            })
+          })
+        })
+      })
     })
   } catch (error) {
     console.error(error)
@@ -66,6 +112,7 @@ const CreateNucleo = async (req, res) => {
       nomeNucleo,
       descricao,
       cidade,
+      estado,
       dataFundacao,
       linkDoacao,
       linkSite,
@@ -84,76 +131,108 @@ const CreateNucleo = async (req, res) => {
       })
     }
 
-    if (!upload || !upload.filename) {
+    // Validar data de fundação (não pode ser futura)
+    const hoje = new Date()
+    hoje.setHours(0, 0, 0, 0)
+    const dataFundacaoDate = new Date(dataFundacao)
+    dataFundacaoDate.setHours(0, 0, 0, 0)
+    if (dataFundacaoDate > hoje) {
       return res.status(400).json({
         success: false,
-        message: "Imagem é obrigatória",
+        message: "Data de fundação não pode ser no futuro",
       })
     }
 
-    const image = `https://storage.googleapis.com/${BUCKET}/${upload.filename}`
-    const hashedPassword = await bcrypt.hash(senha, 12)
+    // Verificar se e-mail já existe
+    const checkEmailQuery = "SELECT email FROM Nucleo WHERE Email = ?"
+    connection.query(checkEmailQuery, [email], async (emailError, emailResults) => {
+      if (emailError) {
+        console.error("Database error checking email:", emailError)
+        return res.status(500).json({
+          success: false,
+          message: "Erro ao verificar email",
+        })
+      }
 
-    const inserirNucleo = `
-      INSERT INTO Nucleo (
-        Nome, Email, Senha, Cidade, Descricao, DataFundacao, fotoCapa,
-        linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram,
-        status, subdominio
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `
+      if (emailResults.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: "Email já cadastrado",
+        })
+      }
 
-    connection.query(
-      inserirNucleo,
-      [
-        nomeNucleo,
-        email,
-        hashedPassword,
-        cidade,
-        descricao,
-        dataFundacao,
-        image,
-        linkDoacao,
-        linkSite,
-        linkLinkedin,
-        linkFacebook,
-        linkInstagram,
-        "pending",
-        null,
-      ],
-      async (err, result) => {
-        if (err) {
-          console.error("Database error creating nucleo:", err)
-          if (err.code === "ER_DUP_ENTRY") {
-            return res.status(409).json({
-              success: false,
-              message: "E-mail já cadastrado",
-            })
-          }
-          return res.status(500).json({
-            success: false,
-            message: "Erro ao criar o núcleo",
-          })
-        }
+      if (!upload || !upload.filename) {
+        return res.status(400).json({
+          success: false,
+          message: "Imagem é obrigatória",
+        })
+      }
 
-        const { logAdminAction } = require("./AdminController")
-        logAdminAction(null, "NUCLEO_CREATED", {
-          nucleoId: result.insertId,
+      const image = `https://storage.googleapis.com/${BUCKET}/${upload.filename}`
+      const hashedPassword = await bcrypt.hash(senha, 12)
+
+      const inserirNucleo = `
+        INSERT INTO Nucleo (
+          Nome, Email, Senha, Cidade, Estado, Descricao, DataFundacao, fotoCapa,
+          linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram,
+          status, subdominio
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `
+
+      connection.query(
+        inserirNucleo,
+        [
           nomeNucleo,
           email,
+          hashedPassword,
           cidade,
-        })
+          estado,
+          descricao,
+          dataFundacao,
+          image,
+          linkDoacao,
+          linkSite,
+          linkLinkedin,
+          linkFacebook,
+          linkInstagram,
+          "pending",
+          null,
+        ],
+        async (err, result) => {
+          if (err) {
+            console.error("Database error creating nucleo:", err)
+            if (err.code === "ER_DUP_ENTRY") {
+              return res.status(409).json({
+                success: false,
+                message: "E-mail já cadastrado",
+              })
+            }
+            return res.status(500).json({
+              success: false,
+              message: "Erro ao criar o núcleo",
+            })
+          }
 
-        res.status(201).json({
-          success: true,
-          message: "Núcleo criado com sucesso!",
-          data: {
-            id: result.insertId,
-            nome: nomeNucleo,
-            status: "pending",
-          },
-        })
-      },
-    )
+          const { logAdminAction } = require("./AdminController")
+          logAdminAction(null, "NUCLEO_CREATED", {
+            nucleoId: result.insertId,
+            nomeNucleo,
+            email,
+            cidade,
+          })
+
+          res.status(201).json({
+            success: true,
+            message: "Núcleo criado com sucesso!",
+            data: {
+              id: result.insertId,
+              nome: nomeNucleo,
+              status: "pending",
+            },
+          })
+        },
+      )
+    })
   } catch (error) {
     console.error("Error creating nucleo:", error)
     res.status(500).json({
@@ -171,6 +250,7 @@ const CreateNucleoByAdmin = async (req, res) => {
       nomeNucleo,
       descricao,
       cidade,
+      estado = "",
       dataFundacao,
       linkDoacao = "",
       linkSite = "",
@@ -208,6 +288,19 @@ const CreateNucleoByAdmin = async (req, res) => {
       })
     }
 
+    if (dataFundacao) {
+      const hoje = new Date()
+      hoje.setHours(0, 0, 0, 0)
+      const dataFundacaoDate = new Date(dataFundacao)
+      dataFundacaoDate.setHours(0, 0, 0, 0)
+      if (dataFundacaoDate > hoje) {
+        return res.status(400).json({
+          success: false,
+          message: "Data de fundação não pode ser no futuro",
+        })
+      }
+    }
+
     // Check if email already exists
     const checkEmailQuery = "SELECT email FROM Nucleo WHERE Email = ?"
     connection.query(checkEmailQuery, [email], async (error, results) => {
@@ -231,10 +324,10 @@ const CreateNucleoByAdmin = async (req, res) => {
 
       const inserirNucleo = `
         INSERT INTO Nucleo (
-          Nome, Email, Senha, Cidade, Descricao, DataFundacao, fotoCapa,
+          Nome, Email, Senha, Cidade, Estado, Descricao, DataFundacao, fotoCapa,
           linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram,
           status, subdominio
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
 
       connection.query(
@@ -244,6 +337,7 @@ const CreateNucleoByAdmin = async (req, res) => {
           email,
           hashedPassword,
           cidade,
+          estado,
           descricao || `Núcleo ${nomeNucleo} criado pelo administrador`,
           dataFundacao || new Date().toISOString().split("T")[0],
           defaultImage,
@@ -265,27 +359,6 @@ const CreateNucleoByAdmin = async (req, res) => {
           }
 
           try {
-            const newSubdomain = nomeNucleo.replace(/\s+/g, "").toLowerCase()
-            const { createSubdomain } = require("../middlewares/domainFunctions")
-            await createSubdomain(newSubdomain)
-
-            const updateSubdomainQuery = "UPDATE Nucleo SET subdominio = ? WHERE ID = ?"
-            connection.query(updateSubdomainQuery, [newSubdomain, result.insertId], (error) => {
-              if (error) {
-                console.error("Error updating subdomain:", error)
-              }
-            })
-
-            const { logAdminAction } = require("./AdminController")
-            if (req.admin) {
-              logAdminAction(req.admin.id, "NUCLEO_CREATED_BY_ADMIN", {
-                nucleoId: result.insertId,
-                nomeNucleo,
-                email,
-                cidade,
-                subdominio: newSubdomain,
-              })
-            }
 
             res.status(201).json({
               success: true,
@@ -296,7 +369,6 @@ const CreateNucleoByAdmin = async (req, res) => {
                 email,
                 cidade,
                 status: "approved",
-                subdominio: newSubdomain,
               },
             })
           } catch (subdomainError) {
@@ -503,7 +575,6 @@ const GetNucleoById = async (req, res) => {
 const updateNucleoStatus = (req, res) => {
   const nucleoId = req.params.id
   const { novoStatus } = req.body
-  
 
   if (!nucleoId || !novoStatus) {
     return res.status(400).json({
@@ -538,8 +609,7 @@ const updateNucleoStatus = (req, res) => {
 
     const { Nome: nucleoNome, Email: nucleoEmail, subdominio } = results[0]
 
-    const updateStatusQuery = `UPDATE Nucleo SET status = ?
-      WHERE ID = ?`
+    const updateStatusQuery = `UPDATE Nucleo SET status = ? WHERE ID = ?`
 
     connection.query(updateStatusQuery, [novoStatus, nucleoId], async (error, results) => {
       if (error) {
@@ -551,18 +621,8 @@ const updateNucleoStatus = (req, res) => {
       }
 
       // Handle subdomain creation for approved nucleos
-      if (novoStatus === "approved" && !subdominio) {
+      if (novoStatus === "approved") {
         try {
-          const newSubdomain = nucleoNome.replace(/\s+/g, "").toLowerCase()
-          await createSubdomain(newSubdomain)
-
-          const updateSubdomainQuery = "UPDATE Nucleo SET subdominio = ? WHERE ID = ?"
-          connection.query(updateSubdomainQuery, [newSubdomain, nucleoId], (error) => {
-            if (error) {
-              console.error("Error updating subdomain:", error)
-            }
-          })
-
           res.json({
             success: true,
             message: `Núcleo ${nucleoNome} ${novoStatus === "approved" ? "aprovado" : "reprovado"} com sucesso`,
@@ -570,7 +630,6 @@ const updateNucleoStatus = (req, res) => {
               nucleoId,
               nucleoNome,
               status: novoStatus,
-              subdominio: newSubdomain,
             },
           })
         } catch (error) {
@@ -738,16 +797,123 @@ const GetNucleosAprovados = async (req, res) => {
   }
 }
 
+const putNucleoWithoutFile = (req, res) => {
+  const nucleoId = req.params.id
+  const {
+    Nome,
+    Email,
+    Cidade,
+    Descricao,
+    DataFundacao,
+    fotoCapa,
+    foto1,
+    foto2,
+    foto3,
+    linkDoacao,
+    linkSite,
+    linkLinkedin,
+    linkFacebook,
+    linkInstagram,
+  } = req.body
+
+  // Verificar se o ID do núcleo está presente
+  if (!nucleoId) {
+    return res.status(400).json({
+      success: false,
+      message: "ID do núcleo é obrigatório",
+    })
+  }
+
+  // Verificar se o núcleo existe
+  const checkNucleoQuery = "SELECT * FROM Nucleo WHERE ID = ?"
+  connection.query(checkNucleoQuery, [nucleoId], (error, results) => {
+    if (error) {
+      console.error("Erro ao verificar núcleo:", error)
+      return res.status(500).json({
+        success: false,
+        message: "Erro ao verificar núcleo",
+      })
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Núcleo não encontrado",
+      })
+    }
+
+    // Atualizar todos os campos fornecidos
+    const updateQuery = `
+      UPDATE Nucleo SET 
+        Nome = COALESCE(?, Nome),
+        Email = COALESCE(?, Email),
+        Cidade = COALESCE(?, Cidade),
+        Descricao = COALESCE(?, Descricao),
+        DataFundacao = COALESCE(?, DataFundacao),
+        fotoCapa = COALESCE(?, fotoCapa),
+        foto1 = COALESCE(?, foto1),
+        foto2 = COALESCE(?, foto2),
+        foto3 = COALESCE(?, foto3),
+        linkDoacao = COALESCE(?, linkDoacao),
+        linkSite = COALESCE(?, linkSite),
+        linkLinkedin = COALESCE(?, linkLinkedin),
+        linkFacebook = COALESCE(?, linkFacebook),
+        linkInstagram = COALESCE(?, linkInstagram)
+      WHERE ID = ?
+    `
+
+    connection.query(
+      updateQuery,
+      [
+        Nome,
+        Email,
+        Cidade,
+        Descricao,
+        DataFundacao,
+        fotoCapa,
+        foto1,
+        foto2,
+        foto3,
+        linkDoacao,
+        linkSite,
+        linkLinkedin,
+        linkFacebook,
+        linkInstagram,
+        nucleoId,
+      ],
+      (error, results) => {
+        if (error) {
+          console.error("Erro ao atualizar núcleo:", error)
+          return res.status(500).json({
+            success: false,
+            message: "Erro ao atualizar núcleo",
+          })
+        }
+
+        res.status(200).json({
+          success: true,
+          message: "Núcleo atualizado com sucesso",
+          data: {
+            nucleoId,
+            affectedRows: results.affectedRows,
+          },
+        })
+      },
+    )
+  })
+}
+
 module.exports = {
   CreateNucleo,
   CreateNucleoByAdmin,
-  GetNucleosAprovados,
   LoginNucleo,
   GetAllNucleos,
   GetNucleoById,
   updateNucleoStatus,
   patchNucleo,
+  putNucleoWithoutFile,
   updateNucleoFoto,
   deleteNucleo,
   interestFoundingNucleo,
+  GetNucleosAprovados,
 }

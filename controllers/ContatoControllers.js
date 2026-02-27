@@ -38,7 +38,10 @@ Por favor, não responda a este e-mail.
       res.send("error");
     } else {
       console.log("Email enviado: " + info.response);
-      res.send("success");
+      res.status(200).json({
+      success: true,
+      message: "Email enviado com sucesso"
+});
     }
   });
 }

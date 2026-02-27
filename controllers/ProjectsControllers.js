@@ -6,8 +6,72 @@ const createProject = (req, res) => {
   const uploads = req.files
   console.log(req.body)
 
+  // Verificar se todos os campos obrigatórios estão presentes (removido requirement de uploads)
+  if (!Nome || !descricao || !NucleoResponsavel || !PessoasImpactadas || !DataFundacao || !Cidade) {
+    res.status(400).send("Todos os campos são obrigatórios")
+    return
+  }
+
+  if (NucleoResponsavel === "undefined" || isNaN(NucleoResponsavel)) {
+    res.status(400).send("ID do núcleo responsável é inválido")
+    return
+  }
+
+  // Validar data de fundação (não pode ser futura)
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+  const dataFundacaoDate = new Date(DataFundacao)
+  dataFundacaoDate.setHours(0, 0, 0, 0)
+  if (dataFundacaoDate > hoje) {
+    res.status(400).send("Data de fundação não pode ser no futuro")
+    return
+  }
+
+  const checkNucleoQuery = "SELECT ID FROM Nucleo WHERE ID = ?"
+  connection.query(checkNucleoQuery, [NucleoResponsavel], (error, nucleoResults) => {
+    if (error) {
+      console.error("Erro ao verificar núcleo: " + error.message)
+      res.status(500).send("Erro ao verificar núcleo")
+      return
+    }
+
+    if (nucleoResults.length === 0) {
+      res.status(400).send("Núcleo responsável não encontrado")
+      return
+    }
+
+    // Processar foto de capa (se fornecida)
+    let fotoCapa = null
+    if (uploads && uploads.fotoCapa) {
+      fotoCapa = `https://storage.googleapis.com/${BUCKET}/${uploads.fotoCapa[0].filename}`
+    }
+
+    const sql =
+      "INSERT INTO Projetos (Nome, NucleoResponsavel, Descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa) VALUES (?, ?, ?, ?,?, ?, ?, ?)"
+
+    connection.query(
+      sql,
+      [Nome, NucleoResponsavel, descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa],
+      (error, results, fields) => {
+        if (error) {
+          console.error("Erro ao criar Projeto: " + error.message)
+          res.status(500).send("Erro ao criar Projeto")
+          return
+        }
+        console.log("Projeto criado com sucesso!")
+        res.status(200).send("Projeto criado com sucesso!")
+      },
+    )
+  })
+}
+
+const createProjectDentro = (req, res) => {
+  const { Nome, NucleoResponsavel, Area, Descricao, PessoasImpactadas, DataInicio, Cidade, fotoCapa } = req.body
+  
+  
+
   // Verificar se todos os campos obrigatórios estão presentes
-  if (!Nome || !descricao || !NucleoResponsavel || !uploads || !PessoasImpactadas || !DataFundacao || !Cidade) {
+  if (!Nome || !Descricao || !NucleoResponsavel || !fotoCapa || !PessoasImpactadas || !DataInicio || !Cidade) {
     res.status(400).send("Todos os campos são obrigatórios")
     return
   }
@@ -30,15 +94,12 @@ const createProject = (req, res) => {
       return
     }
 
-    // Núcleo existe, prosseguir com a criação do projeto
-    const fotoCapa = `https://storage.googleapis.com/${BUCKET}/${uploads.fotoCapa.filename}`
-
     const sql =
       "INSERT INTO Projetos (Nome, NucleoResponsavel, Descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa) VALUES (?, ?, ?, ?,?, ?, ?, ?)"
 
     connection.query(
       sql,
-      [Nome, NucleoResponsavel, descricao, Area, PessoasImpactadas, DataFundacao, Cidade, fotoCapa],
+      [Nome, NucleoResponsavel, Descricao, Area, PessoasImpactadas, DataInicio, Cidade, fotoCapa],
       (error, results, fields) => {
         if (error) {
           console.error("Erro ao criar Projeto: " + error.message)
@@ -67,6 +128,7 @@ const returnProjects = (req, res) => {
     // Organizando os projetos por área
     results.forEach((projeto) => {
       const {
+        ID,
         Area,
         Nome,
         fotoCapa,
@@ -87,6 +149,7 @@ const returnProjects = (req, res) => {
       }
 
       projetosPorArea[Area].push({
+        ID,
         Nome,
         fotoCapa,
         Id,
@@ -283,6 +346,103 @@ const editProjectById = (req, res) => {
   })
 }
 
+//editar um projeto
+const editProjectByIdWithout = (req, res) => {
+  const projectId = req.params.id // Obtenha o ID do projeto a ser editado
+  const {
+    Nome,
+    NucleoResponsavel,
+    Area,
+    Descricao,
+    PessoasImpactadas,
+    DataFundacao,
+    Cidade,
+    fotoCapa,
+    foto1,
+    foto2,
+    foto3,
+    foto4,
+    foto5,
+  } = req.body
+
+  // Verificar se todos os campos obrigatórios estão presentes
+  if (!projectId) {
+    res.status(400).send("Id é obrigatório")
+    return
+  }
+  if (!Nome ) {
+    res.status(400).send("Nome é obrigatório")
+    return
+  }
+  if (!Descricao) {
+    res.status(400).send("Descrição é obrigatória")
+    return
+  }
+  if (!NucleoResponsavel) {
+    res.status(400).send("Núcleo é obrigatório")
+    return
+  }
+  if (!PessoasImpactadas) {
+    res.status(400).send("Impacto é obrigatório")
+    return
+  }
+  if (!DataFundacao) {
+    res.status(400).send("Data de fundação é obrigatória")
+    return
+  }
+   if (!Cidade) {
+    res.status(400).send("Cidade é obrigatória")
+    return
+  }
+
+  // Verificar se o projeto com o ID fornecido existe no banco de dados
+  const checkProjectQuery = "SELECT * FROM Projetos WHERE ID = ?"
+  connection.query(checkProjectQuery, [projectId], (error, results) => {
+    if (error) {
+      console.error("Erro ao verificar projeto: " + error.message)
+      res.status(500).send("Erro ao verificar projeto")
+      return
+    }
+
+    // Verificar se o projeto com o ID fornecido foi encontrado
+    if (results.length === 0) {
+      res.status(404).send("Projeto não encontrado")
+      return
+    }
+
+    // Atualizar os dados do projeto no banco de dados
+    const updateProjectQuery =
+      "UPDATE Projetos SET Nome = ?, NucleoResponsavel = ?, Descricao = ?, Area = ?, PessoasImpactadas = ?, DataFundacao = ?, Cidade = ?, fotoCapa = ?, foto1 = ?, foto2 = ?, foto3 = ?, foto4 = ?, foto5 = ? WHERE ID = ?"
+    const params = [
+      Nome,
+      NucleoResponsavel,
+      Descricao,
+      Area,
+      PessoasImpactadas,
+      DataFundacao,
+      Cidade,
+      fotoCapa || null,
+      foto1 || null,
+      foto2 || null,
+      foto3 || null,
+      foto4 || null,
+      foto5 || null,
+      projectId,
+    ]
+
+    connection.query(updateProjectQuery, params, (error, results) => {
+      if (error) {
+        console.error("Erro ao editar Projeto: " + error.message)
+        res.status(500).send("Erro ao editar Projeto")
+        return
+      }
+      console.log("Projeto editado com sucesso!")
+      res.status(200).json({ message: "Projeto editado com sucesso!", projectId: projectId })
+    })
+  })
+}
+
+
 const patchProject = (req, res) => {
   const projectId = req.params.id // Obtenha o ID do projeto a ser editado
   const { campoAAlterar, novoValor } = req.body
@@ -371,6 +531,8 @@ const deleteProjectById = (req, res) => {
 
 module.exports = {
   createProject,
+  createProjectDentro,
+  editProjectByIdWithout,
   returnProjects,
   returnProjectById,
   editProjectById,
