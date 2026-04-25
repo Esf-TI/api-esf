@@ -1,29 +1,8 @@
 const express = require("express")
 const router = express.Router()
 const multer = require("multer")
-const path = require("path")
-const fs = require("fs")
+const { uploadPublicBuffer } = require("../lib/storageService")
 
-// Garantir que a pasta uploads existe
-const uploadDir = path.join(__dirname, "..", "uploads", "anais")
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true })
-}
-
-// Configuração do multer
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir)
-  },
-  filename: (req, file, cb) => {
-    // Gera um nome único para evitar conflitos
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9)
-    const ext = path.extname(file.originalname)
-    cb(null, `anais-${uniqueSuffix}${ext}`)
-  },
-})
-
-// Filtro para aceitar apenas PDFs
 const fileFilter = (req, file, cb) => {
   if (file.mimetype === "application/pdf") {
     cb(null, true)
@@ -33,7 +12,7 @@ const fileFilter = (req, file, cb) => {
 }
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   fileFilter,
   limits: {
     fileSize: 10 * 1024 * 1024, // Limite de 10MB
@@ -41,7 +20,7 @@ const upload = multer({
 })
 
 // Rota de upload
-router.post("/anais", upload.single("file"), (req, res) => {
+router.post("/anais", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -50,17 +29,20 @@ router.post("/anais", upload.single("file"), (req, res) => {
       })
     }
 
-    // Retorna a URL do arquivo (relativa ao servidor)
-    const fileUrl = `/uploads/anais/${req.file.filename}`
+    const { objectPath, publicUrl } = await uploadPublicBuffer({
+      bucket: "anais",
+      folder: "pdfs",
+      file: req.file,
+    })
 
     return res.status(200).json({
       success: true,
       message: "Arquivo enviado com sucesso",
       data: {
-        filename: req.file.filename,
+        filename: objectPath,
         originalName: req.file.originalname,
         size: req.file.size,
-        url: fileUrl,
+        url: publicUrl,
       },
     })
   } catch (error) {

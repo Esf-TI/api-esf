@@ -1,33 +1,23 @@
-const connection = require("../connection")
+const prisma = require("../lib/prismaClient")
 const { logAdminAction } = require("./AdminController")
 
 const validateBlogData = (data, isUpdate = false) => {
   const errors = []
 
   if (!isUpdate || data.title) {
-    if (!data.title || data.title.trim().length < 5) {
-      errors.push("Título deve ter pelo menos 5 caracteres")
-    }
-    if (data.title && data.title.length > 200) {
-      errors.push("Título não pode exceder 200 caracteres")
-    }
+    if (!data.title || data.title.trim().length < 5) errors.push("Título deve ter pelo menos 5 caracteres")
+    if (data.title && data.title.length > 200) errors.push("Título não pode exceder 200 caracteres")
   }
 
   if (!isUpdate || data.description) {
-    if (!data.description || data.description.trim().length < 20) {
-      errors.push("Descrição deve ter pelo menos 20 caracteres")
-    }
+    if (!data.description || data.description.trim().length < 20) errors.push("Descrição deve ter pelo menos 20 caracteres")
   }
 
   if (!isUpdate || data.content) {
-    if (!data.content || data.content.trim().length < 50) {
-      errors.push("Conteúdo deve ter pelo menos 50 caracteres")
-    }
+    if (!data.content || data.content.trim().length < 50) errors.push("Conteúdo deve ter pelo menos 50 caracteres")
   }
 
-  if (data.author && data.author.length > 100) {
-    errors.push("Nome do autor não pode exceder 100 caracteres")
-  }
+  if (data.author && data.author.length > 100) errors.push("Nome do autor não pode exceder 100 caracteres")
 
   if (data.status && !["published", "draft", "archived"].includes(data.status)) {
     errors.push("Status inválido. Use: published, draft ou archived")
@@ -36,451 +26,197 @@ const validateBlogData = (data, isUpdate = false) => {
   return errors
 }
 
+const buildSlug = (title) =>
+  title.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+
 const CreateBlog = async (req, res) => {
   try {
     const { title, description, content, tags, status = "draft" } = req.body
     const upload = req.file
     const adminId = req.admin?.id || null
 
-    // Validação - status pode ser draft, published ou archived
-    let finalStatus = status || "draft"
-    if (!["draft", "published", "archived"].includes(finalStatus)) {
-      finalStatus = "draft"
-    }
+    let finalStatus = ["draft", "published", "archived"].includes(status) ? status : "draft"
 
-    // Validation
     const validationErrors = validateBlogData({ ...req.body, status: finalStatus })
     if (validationErrors.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Dados inválidos",
-        errors: validationErrors,
-      })
+      return res.status(400).json({ success: false, message: "Dados inválidos", errors: validationErrors })
     }
 
-    if (!upload || !upload.filename) {
-      return res.status(400).json({
-        success: false,
-        message: "Imagem é obrigatória",
-      })
+    if (!upload || !upload.publicUrl) {
+      return res.status(400).json({ success: false, message: "Imagem é obrigatória" })
     }
 
-    // URL local do arquivo (semelhante ao padrão de Anais)
-    const image = `/uploads/blog/${upload.filename}`
-    const slug = title
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "")
+    const image = upload.publicUrl
+    const baseSlug = buildSlug(title)
+    const existing = await prisma.blog.findUnique({ where: { slug: baseSlug } })
+    const finalSlug = existing ? `${baseSlug}-${Date.now()}` : baseSlug
 
-    // Check if slug already exists
-    const checkSlugSql = "SELECT id FROM Blog WHERE slug = ?"
-    connection.query(checkSlugSql, [slug], (err, existingSlug) => {
-      if (err) {
-        console.error("Error checking slug:", err)
-        return res.status(500).json({
-          success: false,
-          message: "Erro ao verificar slug",
-        })
-      }
-
-      const finalSlug = existingSlug.length > 0 ? `${slug}-${Date.now()}` : slug
-
-      const tagsValue = tags && tags.trim() !== "" ? tags : null
-
-      const inserirBlog = `
-        INSERT INTO Blog (title, description, content, image, author_id, tags, status, slug, created_at, updated_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-      `
-
-      connection.query(
-        inserirBlog,
-        [title, description, content, image, adminId, tagsValue, finalStatus, finalSlug],
-        (err, result) => {
-          if (err) {
-            console.error("Error creating blog post:", err)
-            return res.status(500).json({
-              success: false,
-              message: "Erro ao criar post do blog",
-              error: process.env.NODE_ENV === "development" ? err.message : undefined,
-            })
-          }
-
-          if (adminId) {
-            logAdminAction(adminId, "BLOG_POST_CREATED", {
-              postId: result.insertId,
-              title,
-              slug: finalSlug,
-              status: finalStatus,
-            })
-          }
-
-          res.status(201).json({
-            success: true,
-            message: "Post criado com sucesso",
-            data: {
-              id: result.insertId,
-              title,
-              slug: finalSlug,
-              status: finalStatus,
-              image,
-            },
-          })
-        },
-      )
+    const post = await prisma.blog.create({
+      data: {
+        title,
+        description,
+        content,
+        image,
+        author_id: adminId,
+        tags: tags && tags.trim() !== "" ? tags : null,
+        status: finalStatus,
+        slug: finalSlug,
+        published_at: finalStatus === "published" ? new Date() : null,
+      },
     })
+
+    if (adminId) await logAdminAction(adminId, "BLOG_POST_CREATED", { postId: post.id, title, slug: finalSlug, status: finalStatus })
+
+    res.status(201).json({ success: true, message: "Post criado com sucesso", data: { id: post.id, title, slug: finalSlug, status: finalStatus, image } })
   } catch (error) {
     console.error("Error in CreateBlog:", error)
-    res.status(500).json({
-      success: false,
-      message: "Erro interno do servidor",
-    })
+    res.status(500).json({ success: false, message: "Erro interno do servidor" })
   }
 }
 
-const returnAllBlog = (req, res) => {
+const returnAllBlog = async (req, res) => {
   try {
-    const { page = 1, limit = 10, status, search, sortBy = "created_at", sortOrder = "DESC" } = req.query
+    const { page = 1, limit = 10, status, search, sortBy = "created_at", sortOrder = "desc" } = req.query
+    const skip = (page - 1) * limit
 
-    const offset = (page - 1) * limit
-    const whereConditions = []
-    const queryParams = []
-
-    if (status) {
-      whereConditions.push("status = ?")
-      queryParams.push(status)
-    }
-
+    const where = {}
+    if (status) where.status = status
     if (search) {
-      whereConditions.push("(title LIKE ? OR description LIKE ? OR tags LIKE ?)")
-      queryParams.push(`%${search}%`, `%${search}%`, `%${search}%`)
+      where.OR = [
+        { title: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+      ]
     }
-
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : ""
 
     const validSortColumns = ["created_at", "updated_at", "title", "id"]
     const finalSortBy = validSortColumns.includes(sortBy) ? sortBy : "created_at"
-    const finalSortOrder = sortOrder.toUpperCase() === "ASC" ? "ASC" : "DESC"
+    const finalSortOrder = sortOrder.toLowerCase() === "asc" ? "asc" : "desc"
 
-    // Count total
-    const countSql = `SELECT COUNT(*) as total FROM Blog ${whereClause}`
+    const [total, posts] = await Promise.all([
+      prisma.blog.count({ where }),
+      prisma.blog.findMany({
+        where,
+        orderBy: { [finalSortBy]: finalSortOrder },
+        skip: Number(skip),
+        take: Number(limit),
+      }),
+    ])
 
-    connection.query(countSql, queryParams, (err, countResult) => {
-      if (err) {
-        console.error("Error counting blog posts:", err)
-        return res.status(500).json({
-          success: false,
-          message: "Erro ao contar posts",
-        })
-      }
-
-      const total = countResult[0].total
-
-      // Get posts
-      const sql = `
-        SELECT 
-          id, title, description, content, image, author_id, tags, status, slug,
-          DATE_FORMAT(created_at, '%d/%m/%Y %H:%i') as formattedDate,
-          created_at, updated_at
-        FROM Blog 
-        ${whereClause}
-        ORDER BY ${finalSortBy} ${finalSortOrder}
-        LIMIT ? OFFSET ?
-      `
-
-      queryParams.push(Number.parseInt(limit), Number.parseInt(offset))
-
-      connection.query(sql, queryParams, (err, results) => {
-        if (err) {
-          console.error("Error fetching blog posts:", err)
-          return res.status(500).json({
-            success: false,
-            message: "Erro ao buscar posts",
-          })
-        }
-
-        res.json({
-          success: true,
-          data: {
-            posts: results,
-            pagination: {
-              page: Number.parseInt(page),
-              limit: Number.parseInt(limit),
-              total,
-              totalPages: Math.ceil(total / limit),
-              hasMore: offset + results.length < total,
-            },
-          },
-        })
-      })
+    res.json({
+      success: true,
+      data: {
+        posts,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasMore: Number(skip) + posts.length < total,
+        },
+      },
     })
   } catch (error) {
     console.error("Error in returnAllBlog:", error)
-    res.status(500).json({
-      success: false,
-      message: "Erro interno do servidor",
-    })
+    res.status(500).json({ success: false, message: "Erro interno do servidor" })
   }
 }
 
-const returnBlogById = (req, res) => {
+const returnBlogById = async (req, res) => {
   try {
     const { id } = req.params
+    if (!id || isNaN(id)) return res.status(400).json({ success: false, message: "ID inválido" })
 
-    if (!id || isNaN(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "ID inválido",
-      })
-    }
+    const post = await prisma.blog.findUnique({ where: { id: Number(id) } })
+    if (!post) return res.status(404).json({ success: false, message: "Blog não encontrado" })
 
-    const sql = "SELECT * FROM Blog WHERE id = ?"
-
-    connection.query(sql, [id], (err, rows) => {
-      if (err) {
-        console.error("Erro ao buscar blog por ID:", err)
-        return res.status(500).json({
-          success: false,
-          message: "Erro interno do servidor",
-        })
-      }
-
-      if (rows.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "Blog não encontrado",
-        })
-      }
-
-      res.json({
-        success: true,
-        data: rows[0],
-      })
-    })
+    res.json({ success: true, data: post })
   } catch (error) {
     console.error("Error in returnBlogById:", error)
-    res.status(500).json({
-      success: false,
-      message: "Erro interno do servidor",
-    })
+    res.status(500).json({ success: false, message: "Erro interno do servidor" })
   }
 }
 
-const updateBlog = (req, res) => {
+const updateBlog = async (req, res) => {
   try {
     const { id } = req.params
     const { title, description, content, tags, status } = req.body
     const upload = req.file
     const adminId = req.admin?.id || null
 
-    if (!id || isNaN(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "ID inválido",
-      })
-    }
+    if (!id || isNaN(id)) return res.status(400).json({ success: false, message: "ID inválido" })
 
-    // Permitir atualizar apenas um campo de cada vez
     if (!title && !description && !content && !upload && !tags && status === undefined) {
-      return res.status(400).json({
-        success: false,
-        message: "Por favor, forneça pelo menos um campo para atualizar",
-      })
+      return res.status(400).json({ success: false, message: "Por favor, forneça pelo menos um campo para atualizar" })
     }
 
     const validationErrors = validateBlogData(req.body, true)
     if (validationErrors.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Dados inválidos",
-        errors: validationErrors,
-      })
+      return res.status(400).json({ success: false, message: "Dados inválidos", errors: validationErrors })
     }
 
-    let updateBlogQuery = "UPDATE Blog SET"
-    const queryParams = []
-
-    if (title) {
-      updateBlogQuery += " title = ?,"
-      queryParams.push(title)
+    if (status && !["published", "draft", "archived"].includes(status)) {
+      return res.status(400).json({ success: false, message: "Status inválido. Use: published, draft ou archived" })
     }
 
-    if (description) {
-      updateBlogQuery += " description = ?,"
-      queryParams.push(description)
+    const updateData = {}
+    if (title) updateData.title = title
+    if (description) updateData.description = description
+    if (content) updateData.content = content
+    if (tags !== undefined) updateData.tags = tags && tags.trim() !== "" ? tags : null
+    if (status) {
+      updateData.status = status
+      if (status === "published") updateData.published_at = new Date()
     }
+    if (upload?.publicUrl) updateData.image = upload.publicUrl
 
-    if (content) {
-      updateBlogQuery += " content = ?,"
-      queryParams.push(content)
-    }
+    const post = await prisma.blog.update({ where: { id: Number(id) }, data: updateData })
 
-    if (tags !== undefined) {
-      const tagsValue = tags && tags.trim() !== "" ? tags : null
-      updateBlogQuery += " tags = ?,"
-      queryParams.push(tagsValue)
-    }
+    if (adminId) await logAdminAction(adminId, "BLOG_POST_UPDATED", { postId: id, fields: Object.keys(req.body) })
 
-    // Fixo: status deve ser validado e atualizado corretamente
-    if (status !== undefined && status !== null && status !== "") {
-      if (!["published", "draft", "archived"].includes(status)) {
-        return res.status(400).json({
-          success: false,
-          message: "Status inválido. Use: published, draft ou archived",
-        })
-      }
-      updateBlogQuery += " status = ?,"
-      queryParams.push(status)
-    }
-
-    if (upload && upload.filename) {
-      // URL local do arquivo (semelhante ao padrão de Anais)
-      const image = `/uploads/blog/${upload.filename}`
-      updateBlogQuery += " image = ?,"
-      queryParams.push(image)
-    }
-
-    updateBlogQuery += " updated_at = NOW()"
-    updateBlogQuery += " WHERE id = ?"
-    queryParams.push(id)
-
-    connection.query(updateBlogQuery, queryParams, (err, result) => {
-      if (err) {
-        console.error("Erro ao atualizar o blog:", err)
-        return res.status(500).json({
-          success: false,
-          message: "Erro interno do servidor",
-        })
-      }
-
-      if (result.affectedRows === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "Blog não encontrado",
-        })
-      }
-
-      if (adminId) {
-        logAdminAction(adminId, "BLOG_POST_UPDATED", { postId: id, fields: Object.keys(req.body) })
-      }
-
-      res.json({
-        success: true,
-        message: "Blog atualizado com sucesso",
-        data: { id, ...req.body },
-      })
-    })
+    res.json({ success: true, message: "Blog atualizado com sucesso", data: post })
   } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ success: false, message: "Blog não encontrado" })
     console.error("Error in updateBlog:", error)
-    res.status(500).json({
-      success: false,
-      message: "Erro interno do servidor",
-    })
+    res.status(500).json({ success: false, message: "Erro interno do servidor" })
   }
 }
 
-const deleteBlog = (req, res) => {
+const deleteBlog = async (req, res) => {
   try {
     const { id } = req.params
     const adminId = req.admin?.id
 
-    if (!id || isNaN(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "ID inválido",
-      })
-    }
+    if (!id || isNaN(id)) return res.status(400).json({ success: false, message: "ID inválido" })
 
-    const archiveQuery = "UPDATE Blog SET status = 'archived', updated_at = NOW() WHERE id = ?"
+    await prisma.blog.update({ where: { id: Number(id) }, data: { status: "archived" } })
 
-    connection.query(archiveQuery, [id], (err, result) => {
-      if (err) {
-        console.error("Erro ao arquivar o post:", err)
-        return res.status(500).json({
-          success: false,
-          message: "Erro interno do servidor",
-        })
-      }
+    if (adminId) await logAdminAction(adminId, "BLOG_POST_ARCHIVED", { postId: id })
 
-      if (result.affectedRows === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "Post não encontrado",
-        })
-      }
-
-      if (adminId) {
-        logAdminAction(adminId, "BLOG_POST_ARCHIVED", { postId: id })
-      }
-
-      res.json({
-        success: true,
-        message: "Post arquivado com sucesso",
-      })
-    })
+    res.json({ success: true, message: "Post arquivado com sucesso" })
   } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ success: false, message: "Post não encontrado" })
     console.error("Error in deleteBlog:", error)
-    res.status(500).json({
-      success: false,
-      message: "Erro interno do servidor",
-    })
+    res.status(500).json({ success: false, message: "Erro interno do servidor" })
   }
 }
 
-const permanentDeleteBlog = (req, res) => {
+const permanentDeleteBlog = async (req, res) => {
   try {
     const { id } = req.params
     const adminId = req.admin?.id
 
-    if (!id || isNaN(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "ID inválido",
-      })
-    }
+    if (!id || isNaN(id)) return res.status(400).json({ success: false, message: "ID inválido" })
 
-    const deleteQuery = "DELETE FROM Blog WHERE id = ?"
+    await prisma.blog.delete({ where: { id: Number(id) } })
 
-    connection.query(deleteQuery, [id], (err, result) => {
-      if (err) {
-        console.error("Erro ao deletar o post:", err)
-        return res.status(500).json({
-          success: false,
-          message: "Erro interno do servidor",
-        })
-      }
+    if (adminId) await logAdminAction(adminId, "BLOG_POST_DELETED", { postId: id })
 
-      if (result.affectedRows === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "Post não encontrado",
-        })
-      }
-
-      if (adminId) {
-        logAdminAction(adminId, "BLOG_POST_DELETED_PERMANENTLY", { postId: id })
-      }
-
-      res.json({
-        success: true,
-        message: "Post deletado permanentemente",
-      })
-    })
+    res.json({ success: true, message: "Post deletado permanentemente" })
   } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ success: false, message: "Post não encontrado" })
     console.error("Error in permanentDeleteBlog:", error)
-    res.status(500).json({
-      success: false,
-      message: "Erro interno do servidor",
-    })
+    res.status(500).json({ success: false, message: "Erro interno do servidor" })
   }
 }
 
-module.exports = {
-  CreateBlog,
-  returnAllBlog,
-  updateBlog,
-  deleteBlog,
-  permanentDeleteBlog,
-  returnBlogById,
-}
+module.exports = { CreateBlog, returnAllBlog, returnBlogById, updateBlog, deleteBlog, permanentDeleteBlog }

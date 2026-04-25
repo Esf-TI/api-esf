@@ -1,61 +1,46 @@
-const BUCKET = 'engenheiros-sem-fronteiras.appspot.com'
-const admin = require('../firebase')
-const FOLDER_NAME = 'imagens';
+const supabase = require("../lib/supabaseClient")
 
-const bucket = admin.storage().bucket();
-const uploadProjects = (req, res, next) => {
-    if (!req.files) return next();
-  
-    const fotoCapa = req.files['fotoCapa'][0];
-    const foto = req.files['fotos'];
-  
-    const uploads = [];
-    let count = 0;
-  
-    const uploadToStorage = (image) => {
-      const nomeArquivo = `${FOLDER_NAME}/${Date.now() + "." + image.originalname.split(".").pop()}`;
-      const file = bucket.file(nomeArquivo);
-      const stream = file.createWriteStream({
-        metadata: {
-          contentType: image.mimetype
-        }
-      });
-  
-      stream.on("error", (e) => {
-        console.log(e)
-      });
-  
-      stream.on("finish", async () => {
-        try {
-          await file.makePublic();
-  
-          const firebaseUrl = `https://storage.googleapis.com/${BUCKET}/${nomeArquivo}`;
-          uploads.push({ filename: nomeArquivo, firebaseUrl: firebaseUrl });
-  
-          count++;
-  
-          if (count === foto.length) {
-            fotoCapa.filename = nomeArquivo;
-            fotoCapa.firebaseUri = firebaseUrl;
-  
-            req.files = {
-              fotoCapa: fotoCapa,
-              foto: uploads
-            };
-            next();
-          }
-        } catch (error) {
-          console.log(error)
-        }
-      });
-  
-      stream.end(image.buffer);
-    };
-  
-    uploadToStorage(fotoCapa);
-    foto.forEach((image) => {
-      uploadToStorage(image);
-    });
-  };
+const BUCKET = "projetos"
 
-module.exports = uploadProjects;
+const uploadToStorage = async (image) => {
+  const ext = image.originalname.split(".").pop()
+  const fileName = `imagens/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(fileName, image.buffer, { contentType: image.mimetype, upsert: false })
+
+  if (error) throw new Error(`Upload falhou: ${error.message}`)
+
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(fileName)
+
+  return { filename: fileName, publicUrl: data.publicUrl }
+}
+
+const uploadProjects = async (req, res, next) => {
+  if (!req.files) return next()
+
+  try {
+    const fotoCapa = req.files["fotoCapa"]?.[0]
+    const fotos = req.files["fotos"] || []
+
+    if (!fotoCapa) return next()
+
+    const [capaResult, ...fotosResults] = await Promise.all([
+      uploadToStorage(fotoCapa),
+      ...fotos.map(uploadToStorage),
+    ])
+
+    req.files = {
+      fotoCapa: capaResult,
+      foto: fotosResults,
+    }
+
+    next()
+  } catch (error) {
+    console.error("Erro no upload de projeto:", error.message)
+    return res.status(500).json({ success: false, message: "Erro ao fazer upload das imagens" })
+  }
+}
+
+module.exports = uploadProjects

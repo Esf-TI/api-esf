@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Admin {
+  id         Int      @id @default(autoincrement())
+  nome       String   @db.VarChar(255)
+  email      String   @unique @db.VarChar(255)
+  senha      String   @db.VarChar(255)
+  role       String   @default("admin") @db.VarChar(50)
+  status     String   @default("active") @db.VarChar(50)
+  last_login DateTime?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tokens         AdminToken[]
+  logs           AdminLog[]
+  audit_logs     AdminAuditLog[]
+  blog_posts     Blog[]
+  anais          Anais[]
+  nucleos_approved Nucleo[] @relation("ApprovedBy")
+  contatos_replied ContatoMessage[] @relation("RepliedBy")
+}
+
+model AdminToken {
+  id                  Int      @id @default(autoincrement())
+  adminId             Int
+  accessToken         String   @db.VarChar(512)
+  refreshToken        String   @db.VarChar(512)
+  accessTokenExpires  DateTime
+  refreshTokenExpires DateTime
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+}
+
+model AdminLog {
+  id        Int      @id @default(autoincrement())
+  adminId   Int?
+  action    String   @db.VarChar(100)
+  details   Json?
+  timestamp DateTime @default(now())
+
+  admin Admin? @relation(fields: [adminId], references: [id], onDelete: SetNull)
+}
+
+model AdminAuditLog {
+  id          Int      @id @default(autoincrement())
+  admin_id    Int
+  action      String   @db.VarChar(100)
+  target_type String   @db.VarChar(50)
+  target_id   Int?
+  details     Json?
+  ip_address  String?  @db.VarChar(45)
+  user_agent  String?  @db.Text
+  created_at  DateTime @default(now())
+
+  admin Admin @relation(fields: [admin_id], references: [id], onDelete: Cascade)
+}
+
+model Blog {
+  id               Int       @id @default(autoincrement())
+  title            String    @db.VarChar(255)
+  slug             String    @unique @db.VarChar(255)
+  description      String?   @db.Text
+  content          String?   @db.Text
+  image            String?   @db.VarChar(500)
+  author_id        Int?
+  status           String    @default("draft") @db.VarChar(50)
+  views            Int       @default(0)
+  featured         Boolean   @default(false)
+  meta_description String?   @db.Text
+  tags             Json?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+  published_at     DateTime?
+
+  author Admin? @relation(fields: [author_id], references: [id], onDelete: SetNull)
+}
+
+model Nucleo {
+  id             Int       @id @default(autoincrement())
+  Nome           String    @db.VarChar(255)
+  Email          String    @unique @db.VarChar(255)
+  Senha          String    @db.VarChar(255)
+  Cidade         String?   @db.VarChar(255)
+  Estado         String?   @db.VarChar(255)
+  subdominio     String?   @unique @db.VarChar(255)
+  Descricao      String?   @db.Text
+  DataFundacao   DateTime? @db.Date
+  fotoCapa       String?   @db.VarChar(500)
+  foto1          String?   @db.VarChar(500)
+  foto2          String?   @db.VarChar(500)
+  foto3          String?   @db.VarChar(500)
+  linkDoacao     String?   @db.VarChar(255)
+  linkSite       String?   @db.VarChar(255)
+  linkLinkedin   String?   @db.VarChar(255)
+  linkFacebook   String?   @db.VarChar(255)
+  linkInstagram  String?   @db.VarChar(255)
+  status         String    @default("pending") @db.VarChar(50)
+  rejection_reason String? @db.Text
+  approved_by    Int?
+  approved_at    DateTime?
+  Token          String?   @db.VarChar(512)
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  approver  Admin?    @relation("ApprovedBy", fields: [approved_by], references: [id], onDelete: SetNull)
+  projetos  Projeto[]
+  tokens    NucleoToken[]
+}
+
+model NucleoToken {
+  id                  Int      @id @default(autoincrement())
+  nucleoId            Int
+  accessToken         String   @db.VarChar(512)
+  refreshToken        String   @db.VarChar(512)
+  accessTokenExpires  DateTime
+  refreshTokenExpires DateTime
+  created_at          DateTime @default(now())
+
+  nucleo Nucleo @relation(fields: [nucleoId], references: [id], onDelete: Cascade)
+}
+
+model Projeto {
+  id                Int       @id @default(autoincrement())
+  Nome              String    @db.VarChar(255)
+  NucleoResponsavel Int?
+  Descricao         String?   @db.Text
+  Area              String?   @db.VarChar(255)
+  PessoasImpactadas Int?
+  DataFundacao      DateTime? @db.Date
+  Cidade            String?   @db.VarChar(255)
+  Estado            String?   @db.VarChar(255)
+  fotoCapa          String?   @db.VarChar(500)
+  foto1             String?   @db.VarChar(500)
+  foto2             String?   @db.VarChar(500)
+  foto3             String?   @db.VarChar(500)
+  foto4             String?   @db.VarChar(500)
+  foto5             String?   @db.VarChar(500)
+  status            String    @default("active") @db.VarChar(50)
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  nucleo Nucleo? @relation(fields: [NucleoResponsavel], references: [id], onDelete: Cascade)
+
+  @@map("Projetos")
+}
+
+model Anais {
+  id               Int       @id @default(autoincrement())
+  title            String    @db.VarChar(255)
+  description      String?   @db.Text
+  year             Int
+  event_name       String?   @db.VarChar(255)
+  pdf_url          String    @db.VarChar(500)
+  cover_image_url  String?   @db.VarChar(500)
+  authors          Json?
+  pages            Int?
+  isbn             String?   @db.VarChar(50)
+  doi              String?   @db.VarChar(100)
+  keywords         Json?
+  category         String    @default("technical") @db.VarChar(100)
+  status           String    @default("active") @db.VarChar(50)
+  downloads        Int       @default(0)
+  views            Int       @default(0)
+  featured         Boolean   @default(false)
+  created_by       Int?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+  published_at     DateTime?
+
+  creator Admin? @relation(fields: [created_by], references: [id], onDelete: SetNull)
+}
+
+model ContatoMessage {
+  id         Int       @id @default(autoincrement())
+  nome       String    @db.VarChar(255)
+  email      String    @db.VarChar(255)
+  telefone   String?   @db.VarChar(20)
+  assunto    String?   @db.VarChar(255)
+  mensagem   String    @db.Text
+  status     String    @default("new") @db.VarChar(50)
+  replied_by Int?
+  replied_at DateTime?
+  created_at DateTime  @default(now())
+
+  replier Admin? @relation("RepliedBy", fields: [replied_by], references: [id], onDelete: SetNull)
+
+  @@map("contato_messages")
+}
