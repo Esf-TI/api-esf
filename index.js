@@ -38,10 +38,17 @@ app.get("/.well-known/appspecific/com.chrome.devtools.json", (req, res) => {
 })
 
 const { ensureDefaultAdmin } = require("./scripts/seed-admin")
+const { ensureStorageBuckets } = require("./lib/ensureStorageBuckets")
 
 const PORT = process.env.PORT || 3000
 app.listen(PORT, async () => {
   console.log(`Servidor rodando na porta ${PORT}`)
+  try {
+    await ensureStorageBuckets()
+  } catch (err) {
+    console.error("[bootstrap] Falha ao garantir buckets de storage:", err.message)
+  }
+
   try {
     await ensureDefaultAdmin()
   } catch (err) {
