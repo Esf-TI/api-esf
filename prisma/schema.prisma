@@ -102,6 +102,9 @@ model Nucleo {
   linkLinkedin   String?   @db.VarChar(255)
   linkFacebook   String?   @db.VarChar(255)
   linkInstagram  String?   @db.VarChar(255)
+  logoUrl        String?   @db.VarChar(500)
+  corPrimaria    String?   @db.VarChar(20)
+  Endereco       String?   @db.VarChar(500)
   status         String    @default("pending") @db.VarChar(50)
   rejection_reason String? @db.Text
   approved_by    Int?

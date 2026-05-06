@@ -384,7 +384,7 @@ const putNucleoWithoutFile = async (req, res) => {
     return res.status(400).json({ success: false, message: "ID do núcleo é obrigatório" })
   }
 
-  const { Nome, Email, Cidade, Descricao, DataFundacao, fotoCapa, foto1, foto2, foto3, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram } = req.body
+  const { Nome, Email, Cidade, Descricao, DataFundacao, fotoCapa, foto1, foto2, foto3, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram, logoUrl, corPrimaria, Endereco } = req.body
 
   try {
     await prisma.nucleo.update({
@@ -404,6 +404,9 @@ const putNucleoWithoutFile = async (req, res) => {
         ...(linkLinkedin !== undefined && { linkLinkedin }),
         ...(linkFacebook !== undefined && { linkFacebook }),
         ...(linkInstagram !== undefined && { linkInstagram }),
+        ...(logoUrl !== undefined && { logoUrl }),
+        ...(corPrimaria !== undefined && { corPrimaria }),
+        ...(Endereco !== undefined && { Endereco }),
       },
     })
 
