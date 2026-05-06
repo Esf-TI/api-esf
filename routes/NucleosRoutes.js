@@ -10,10 +10,25 @@ const photo = multer({
   limits: 10 * 1024 * 1024,
 }).single("fotoCapa")
 
+const singleImagem = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_, file, cb) => {
+    if (file.mimetype.startsWith("image/")) cb(null, true)
+    else cb(new Error("Apenas imagens são permitidas"))
+  },
+}).single("imagem")
+
 const uploadImage = require("../middlewares/storageUpload")
 
 //CRIAR NÚCLEO
 router.post("/nucleos", photo, uploadImage, NucleosControllers.CreateNucleo)
+
+//UPLOAD DE IMAGEM AVULSA (retorna URL pública no bucket nucleos)
+router.post("/upload-imagem", singleImagem, uploadImage, (req, res) => {
+  if (!req.file?.publicUrl) return res.status(400).json({ error: "Nenhuma imagem enviada" })
+  res.json({ url: req.file.publicUrl })
+})
 
 //ATUALIZA FOTO DO NUCLEO
 router.patch("/photo/:id", photo, uploadImage, NucleosControllers.updateNucleoFoto)
