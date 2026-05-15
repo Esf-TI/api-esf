@@ -5,6 +5,9 @@ const prisma = require("../lib/prismaClient")
 const { generateTokens } = require("../middlewares/authFunctions")
 require("dotenv").config()
 
+/** Piso para displayTotal quando há poucos cadastros aprovados (alinhado ao `DEFAULT_NUCLEOS_EXIBICAO_PISO` no front). */
+const DEFAULT_NUCLEOS_EXIBICAO_PISO = 35
+
 // WordPress/cPanel standby — mantido para uso futuro
 // const { createSubdomain } = require("../middlewares/domainFunctions")
 
@@ -369,8 +372,32 @@ const GetNucleosAprovados = async (req, res) => {
     })
 
     const formatted = nucleos.map((n) => ({ ...n, totalProjetos: n._count.projetos }))
+    const totalCadastrados = formatted.length
+    const envExibicao = Number.parseInt(String(process.env.NUCLEOS_EXIBICAO_PUBLICA || "").trim(), 10)
+    const rawPiso = process.env.NUCLEOS_EXIBICAO_PISO
+    const piso =
+      rawPiso === "0"
+        ? 0
+        : rawPiso == null || rawPiso === ""
+          ? DEFAULT_NUCLEOS_EXIBICAO_PISO
+          : (() => {
+              const n = Number.parseInt(String(rawPiso).trim(), 10)
+              return Number.isFinite(n) && n >= 0 ? n : DEFAULT_NUCLEOS_EXIBICAO_PISO
+            })()
+    const displayTotal =
+      Number.isFinite(envExibicao) && envExibicao > 0
+        ? envExibicao
+        : piso > 0
+          ? Math.max(totalCadastrados, piso)
+          : totalCadastrados
 
-    res.json({ success: true, data: formatted, total: formatted.length })
+    res.json({
+      success: true,
+      data: formatted,
+      total: totalCadastrados,
+      /** Número divulgado (rede); use NUCLEOS_EXIBICAO_PUBLICA quando for diferente dos aprovados no sistema */
+      displayTotal,
+    })
   } catch (error) {
     console.error("Error in GetNucleosAprovados:", error)
     res.status(500).json({ success: false, message: "Erro interno do servidor" })

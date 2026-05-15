@@ -22,6 +22,7 @@ model Admin {
   audit_logs     AdminAuditLog[]
   blog_posts     Blog[]
   anais          Anais[]
+  documentos_transparencia DocumentoTransparencia[]
   nucleos_approved Nucleo[] @relation("ApprovedBy")
   contatos_replied ContatoMessage[] @relation("RepliedBy")
 }
@@ -179,6 +180,23 @@ model Anais {
   published_at     DateTime?
 
   creator Admin? @relation(fields: [created_by], references: [id], onDelete: SetNull)
+}
+
+model DocumentoTransparencia {
+  id          Int      @id @default(autoincrement())
+  titulo      String   @db.VarChar(255)
+  descricao   String?  @db.Text
+  categoria   String   @db.VarChar(100)
+  arquivo_url String   @db.VarChar(500)
+  arquivo_nome String  @db.VarChar(255)
+  arquivo_tamanho Int?
+  created_by  Int?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  creator Admin? @relation(fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@map("documentos_transparencia")
 }
 
 model ContatoMessage {

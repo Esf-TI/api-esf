@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "Nucleo" ADD COLUMN "logoUrl" VARCHAR(500);
+ALTER TABLE "Nucleo" ADD COLUMN "corPrimaria" VARCHAR(20);
+ALTER TABLE "Nucleo" ADD COLUMN "Endereco" VARCHAR(500);

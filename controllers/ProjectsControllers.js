@@ -43,9 +43,19 @@ const createProject = async (req, res) => {
 }
 
 const createProjectDentro = async (req, res) => {
-  const { Nome, NucleoResponsavel, Area, Descricao, PessoasImpactadas, DataInicio, Cidade, fotoCapa } = req.body
+  const { Nome, NucleoResponsavel, Area, Descricao, PessoasImpactadas, DataInicio, Cidade, fotoCapa, foto1, foto2, foto3 } = req.body
 
-  if (!Nome || !Descricao || !NucleoResponsavel || !fotoCapa || !PessoasImpactadas || !DataInicio || !Cidade) {
+  if (
+    !Nome ||
+    !Descricao ||
+    !NucleoResponsavel ||
+    !fotoCapa ||
+    PessoasImpactadas === undefined ||
+    PessoasImpactadas === null ||
+    PessoasImpactadas === "" ||
+    !DataInicio ||
+    !Cidade
+  ) {
     return res.status(400).send("Todos os campos são obrigatórios")
   }
 
@@ -67,6 +77,9 @@ const createProjectDentro = async (req, res) => {
         DataFundacao: new Date(DataInicio),
         Cidade,
         fotoCapa,
+        foto1: foto1 || null,
+        foto2: foto2 || null,
+        foto3: foto3 || null,
       },
     })
 
@@ -176,21 +189,47 @@ const editProjectById = async (req, res) => {
 
 const editProjectByIdWithout = async (req, res) => {
   const projectId = Number(req.params.id)
-  const { Nome, NucleoResponsavel, Area, Descricao, PessoasImpactadas, DataFundacao, Cidade, fotoCapa, foto1, foto2, foto3, foto4, foto5 } = req.body
+  const {
+    Nome,
+    NucleoResponsavel,
+    Area,
+    Descricao,
+    PessoasImpactadas,
+    DataFundacao: dataFundacaoBody,
+    DataInicio,
+    Cidade,
+    fotoCapa,
+    foto1,
+    foto2,
+    foto3,
+    foto4,
+    foto5,
+  } = req.body
+
+  const dataFundacaoVal = dataFundacaoBody || DataInicio
 
   if (!projectId) return res.status(400).send("Id é obrigatório")
   if (!Nome) return res.status(400).send("Nome é obrigatório")
   if (!Descricao) return res.status(400).send("Descrição é obrigatória")
-  if (!NucleoResponsavel) return res.status(400).send("Núcleo é obrigatório")
-  if (!PessoasImpactadas) return res.status(400).send("Impacto é obrigatório")
-  if (!DataFundacao) return res.status(400).send("Data de fundação é obrigatória")
+  if (NucleoResponsavel === undefined || NucleoResponsavel === null || NucleoResponsavel === "") {
+    return res.status(400).send("Núcleo é obrigatório")
+  }
+  if (PessoasImpactadas === undefined || PessoasImpactadas === null || PessoasImpactadas === "") {
+    return res.status(400).send("Impacto é obrigatório")
+  }
+  if (!dataFundacaoVal) return res.status(400).send("Data de fundação é obrigatória")
   if (!Cidade) return res.status(400).send("Cidade é obrigatória")
+
+  const dataFundacaoDate = new Date(dataFundacaoVal)
+  if (Number.isNaN(dataFundacaoDate.getTime())) {
+    return res.status(400).send("Data de fundação inválida")
+  }
 
   try {
     const existing = await prisma.projeto.findUnique({ where: { id: projectId } })
     if (!existing) return res.status(404).send("Projeto não encontrado")
 
-    await prisma.projeto.update({
+    const updated = await prisma.projeto.update({
       where: { id: projectId },
       data: {
         Nome,
@@ -198,7 +237,7 @@ const editProjectByIdWithout = async (req, res) => {
         Descricao,
         Area: Area || null,
         PessoasImpactadas: Number(PessoasImpactadas),
-        DataFundacao: new Date(DataFundacao),
+        DataFundacao: dataFundacaoDate,
         Cidade,
         fotoCapa: fotoCapa || null,
         foto1: foto1 || null,
@@ -209,7 +248,7 @@ const editProjectByIdWithout = async (req, res) => {
       },
     })
 
-    res.status(200).json({ message: "Projeto editado com sucesso!", projectId })
+    res.status(200).json({ message: "Projeto editado com sucesso!", projectId, data: updated })
   } catch (error) {
     console.error("Erro ao editar Projeto:", error)
     res.status(500).send("Erro ao editar Projeto")

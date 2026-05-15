@@ -17,6 +17,7 @@ const BlogRoutes = require("./routes/BlogRoutes")
 const AdminRoutes = require("./routes/AdminRoutes")
 const ContatoRoutes = require("./routes/ContatoRoutes")
 const AnaisRoutes = require("./routes/AnaisRoutes")
+const TransparenciaRoutes = require("./routes/TransparenciaRoutes")
 const uploadRouter = require("./routes/UploadRouter")
 
 app.use("/api/upload", uploadRouter)
@@ -26,6 +27,7 @@ app.use("/blog", BlogRoutes)
 app.use("/admin", AdminRoutes)
 app.use("/contato", ContatoRoutes)
 app.use("/anais", AnaisRoutes)
+app.use("/transparencia", TransparenciaRoutes)
 
 // Health check
 app.get("/", (req, res) => {
@@ -38,6 +40,7 @@ app.get("/.well-known/appspecific/com.chrome.devtools.json", (req, res) => {
 })
 
 const { ensureDefaultAdmin } = require("./scripts/seed-admin")
+const { seedTransparenciaPadrao } = require("./scripts/seed-transparencia-padrao")
 const { ensureStorageBuckets } = require("./lib/ensureStorageBuckets")
 
 const PORT = process.env.PORT || 3000
@@ -53,5 +56,11 @@ app.listen(PORT, async () => {
     await ensureDefaultAdmin()
   } catch (err) {
     console.error("[bootstrap] Falha ao garantir admin padrão:", err.message)
+  }
+
+  try {
+    await seedTransparenciaPadrao()
+  } catch (err) {
+    console.error("[bootstrap] Falha ao garantir cards padrão de transparência:", err.message)
   }
 })

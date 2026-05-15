@@ -8,12 +8,13 @@
   "main": "index.js",
   "scripts": {
     "postinstall": "prisma generate",
-    "start": "node index.js",
+    "start": "prisma migrate deploy && node index.js",
     "dev": "nodemon index.js",
     "migrate": "npx prisma migrate dev",
     "generate": "npx prisma generate",
     "studio": "npx prisma studio",
     "seed": "node scripts/seed-admin.js",
+    "seed:transparencia": "node scripts/seed-transparencia-padrao.js",
     "migrate:uploads": "node scripts/migrate-uploads-to-supabase.js",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
@@ -38,7 +39,8 @@
     "node-fetch": "^3.3.2",
     "nodemailer": "^6.9.13",
     "pg": "^8.20.0",
-    "prisma": "^7.7.0"
+    "prisma": "^7.7.0",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
