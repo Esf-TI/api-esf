@@ -1,0 +1,3 @@
+# Coolify / Nixpacks: Node 22.11 não satisfaz o engines do Prisma 7.7 (exige >=22.12).
+[variables]
+NIXPACKS_NODE_VERSION = "22.12.0"
