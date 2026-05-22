@@ -1,4 +1,5 @@
 const supabase = require("../lib/supabaseClient")
+const { optimizeImage } = require("../lib/imageOptimizer")
 
 const DEFAULT_BUCKET = "nucleos"
 
@@ -9,12 +10,28 @@ const uploadImage = async (req, res, next) => {
   const BUCKET = req.uploadBucket || DEFAULT_BUCKET
 
   const image = req.file
-  const ext = image.originalname.split(".").pop()
+  let buffer = image.buffer
+  let contentType = image.mimetype
+  let ext = image.originalname.split(".").pop()
+
+  if (image.mimetype && image.mimetype.startsWith("image/")) {
+    try {
+      const optimized = await optimizeImage(image.buffer)
+      if (optimized) {
+        buffer = optimized
+        contentType = "image/webp"
+        ext = "webp"
+      }
+    } catch (err) {
+      console.error("Erro ao otimizar imagem no storageUpload:", err)
+    }
+  }
+
   const fileName = `imagens/${Date.now()}.${ext}`
 
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(fileName, image.buffer, { contentType: image.mimetype, upsert: false })
+    .upload(fileName, buffer, { contentType, upsert: false })
 
   if (error) {
     console.error(`Erro no upload para Supabase Storage [bucket: ${BUCKET}]:`, error.message)

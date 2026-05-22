@@ -6,6 +6,7 @@ const multer = require("multer")
 const uploadProjects = require("../middlewares/uploadsProjects")
 const uploadImage = require("../middlewares/storageUpload")
 const supabase = require("../lib/supabaseClient")
+const { optimizeImage } = require("../lib/imageOptimizer")
 
 // Multer em memória para upload de múltiplas fotos (capa + fotos extras)
 const multiUpload = multer({
@@ -36,11 +37,27 @@ const singleImagem = multer({
 router.post("/upload-imagem", singleImagem, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Nenhuma imagem enviada" })
   const image = req.file
-  const ext = image.originalname.split(".").pop()
+  let buffer = image.buffer
+  let contentType = image.mimetype
+  let ext = image.originalname.split(".").pop()
+
+  if (image.mimetype && image.mimetype.startsWith("image/")) {
+    try {
+      const optimized = await optimizeImage(image.buffer)
+      if (optimized) {
+        buffer = optimized
+        contentType = "image/webp"
+        ext = "webp"
+      }
+    } catch (err) {
+      console.error("Erro ao otimizar imagem avulsa de projeto:", err)
+    }
+  }
+
   const fileName = `imagens/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
   const { error } = await supabase.storage
     .from("projetos")
-    .upload(fileName, image.buffer, { contentType: image.mimetype, upsert: false })
+    .upload(fileName, buffer, { contentType, upsert: false })
   if (error) return res.status(500).json({ error: "Erro ao fazer upload da imagem" })
   const { data } = supabase.storage.from("projetos").getPublicUrl(fileName)
   res.json({ url: data.publicUrl })

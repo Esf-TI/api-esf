@@ -1,14 +1,31 @@
 const supabase = require("../lib/supabaseClient")
+const { optimizeImage } = require("../lib/imageOptimizer")
 
 const BUCKET = "projetos"
 
 const uploadToStorage = async (image) => {
-  const ext = image.originalname.split(".").pop()
+  let buffer = image.buffer
+  let contentType = image.mimetype
+  let ext = image.originalname.split(".").pop()
+
+  if (image.mimetype && image.mimetype.startsWith("image/")) {
+    try {
+      const optimized = await optimizeImage(image.buffer)
+      if (optimized) {
+        buffer = optimized
+        contentType = "image/webp"
+        ext = "webp"
+      }
+    } catch (err) {
+      console.error("Erro ao otimizar imagem no uploadsProjects:", err)
+    }
+  }
+
   const fileName = `imagens/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(fileName, image.buffer, { contentType: image.mimetype, upsert: false })
+    .upload(fileName, buffer, { contentType, upsert: false })
 
   if (error) throw new Error(`Upload falhou: ${error.message}`)
 
