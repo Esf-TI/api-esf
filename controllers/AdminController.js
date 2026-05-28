@@ -168,17 +168,22 @@ const getDashboardStats = async (req, res) => {
 const getActivityLogs = async (req, res) => {
   try {
     const { page = 1, limit = 50, action } = req.query
-    const skip = (page - 1) * limit
+    const pageNum = Math.max(1, Number(page))
+    const limitNum = Math.min(200, Math.max(1, Number(limit)))
+    const skip = (pageNum - 1) * limitNum
 
     const where = action ? { action } : {}
 
-    const logs = await prisma.adminLog.findMany({
-      where,
-      orderBy: { timestamp: "desc" },
-      skip: Number(skip),
-      take: Number(limit),
-      include: { admin: { select: { email: true, nome: true } } },
-    })
+    const [total, logs] = await Promise.all([
+      prisma.adminLog.count({ where }),
+      prisma.adminLog.findMany({
+        where,
+        orderBy: { timestamp: "desc" },
+        skip,
+        take: limitNum,
+        include: { admin: { select: { email: true, nome: true } } },
+      }),
+    ])
 
     const formatted = logs.map((l) => ({
       ...l,
@@ -186,7 +191,7 @@ const getActivityLogs = async (req, res) => {
       adminName: l.admin?.nome ?? null,
     }))
 
-    res.json({ success: true, data: { logs: formatted, pagination: { page: Number(page), limit: Number(limit), total: formatted.length } } })
+    res.json({ success: true, data: { logs: formatted, pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) } } })
   } catch (error) {
     console.error("Error in getActivityLogs:", error)
     res.status(500).json({ success: false, message: "Erro interno do servidor" })

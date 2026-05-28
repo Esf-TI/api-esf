@@ -18,6 +18,7 @@ const AdminRoutes = require("./routes/AdminRoutes")
 const ContatoRoutes = require("./routes/ContatoRoutes")
 const AnaisRoutes = require("./routes/AnaisRoutes")
 const TransparenciaRoutes = require("./routes/TransparenciaRoutes")
+const GovernancaRoutes = require("./routes/GovernancaRoutes")
 const uploadRouter = require("./routes/UploadRouter")
 const MigrationRoutes = require("./routes/MigrationRoutes")
 
@@ -29,6 +30,7 @@ app.use("/admin", AdminRoutes)
 app.use("/contato", ContatoRoutes)
 app.use("/anais", AnaisRoutes)
 app.use("/transparencia", TransparenciaRoutes)
+app.use("/governanca", GovernancaRoutes)
 app.use("/admin", MigrationRoutes)
 
 // Health check

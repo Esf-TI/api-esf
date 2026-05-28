@@ -35,6 +35,10 @@ router.patch("/photo/:id", authenticateNucleo, photo, uploadImage, NucleosContro
 //LOGAR COMO NÚCLEO
 router.post("/login", NucleosControllers.LoginNucleo)
 
+//REFRESH TOKEN DO NÚCLEO
+const { updateToken } = require("../controllers/AdminController")
+router.post("/auth/refresh", updateToken)
+
 //RETORNAR TODOS OS NÚCLEOS ( PARA ADMIN )
 router.get("/nucleos", NucleosControllers.GetAllNucleos)
 

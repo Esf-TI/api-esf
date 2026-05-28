@@ -77,7 +77,9 @@ const CreateBlog = async (req, res) => {
 const returnAllBlog = async (req, res) => {
   try {
     const { page = 1, limit = 10, status, search, sortBy = "created_at", sortOrder = "desc" } = req.query
-    const skip = (page - 1) * limit
+    const pageNum = Math.max(1, Number(page))
+    const limitNum = Math.min(100, Math.max(1, Number(limit)))
+    const skip = (pageNum - 1) * limitNum
 
     const where = {}
     if (status) where.status = status
@@ -97,8 +99,8 @@ const returnAllBlog = async (req, res) => {
       prisma.blog.findMany({
         where,
         orderBy: { [finalSortBy]: finalSortOrder },
-        skip: Number(skip),
-        take: Number(limit),
+        skip,
+        take: limitNum,
       }),
     ])
 
@@ -107,11 +109,11 @@ const returnAllBlog = async (req, res) => {
       data: {
         posts,
         pagination: {
-          page: Number(page),
-          limit: Number(limit),
+          page: pageNum,
+          limit: limitNum,
           total,
-          totalPages: Math.ceil(total / limit),
-          hasMore: Number(skip) + posts.length < total,
+          totalPages: Math.ceil(total / limitNum),
+          hasMore: skip + posts.length < total,
         },
       },
     })
