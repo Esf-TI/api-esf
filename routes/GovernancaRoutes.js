@@ -6,13 +6,10 @@ const GovernancaController = require("../controllers/GovernancaController")
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB para fotos
+  limits: { fileSize: 5 * 1024 * 1024 },
 })
 
-// Rotas públicas
-router.get("/", GovernancaController.listar)
-
-// Rotas protegidas (admin)
+router.get("/", GovernancaController.listarPublico)
 router.get("/admin/todos", authenticateAdmin, GovernancaController.listarTodos)
 router.post("/", authenticateAdmin, upload.single("foto"), GovernancaController.criar)
 router.put("/:id", authenticateAdmin, upload.single("foto"), GovernancaController.atualizar)

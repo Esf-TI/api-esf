@@ -199,6 +199,21 @@ model DocumentoTransparencia {
   @@map("documentos_transparencia")
 }
 
+model GovernancaMembro {
+  id         Int      @id @default(autoincrement())
+  nome       String   @db.VarChar(255)
+  cargo      String   @db.VarChar(255)
+  conselho   String   @db.VarChar(150)
+  nucleo     String?  @db.VarChar(255)
+  foto_url   String?  @db.VarChar(500)
+  ordem      Int      @default(0)
+  ativo      Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("governanca_membros")
+}
+
 model ContatoMessage {
   id         Int       @id @default(autoincrement())
   nome       String    @db.VarChar(255)
@@ -214,19 +229,4 @@ model ContatoMessage {
   replier Admin? @relation("RepliedBy", fields: [replied_by], references: [id], onDelete: SetNull)
 
   @@map("contato_messages")
-}
-
-model GovernancaMembro {
-  id         Int      @id @default(autoincrement())
-  nome       String   @db.VarChar(255)
-  cargo      String   @db.VarChar(255)
-  conselho   String   @db.VarChar(100)
-  nucleo     String?  @db.VarChar(255)
-  foto_url   String?  @db.VarChar(500)
-  ordem      Int      @default(0)
-  ativo      Boolean  @default(true)
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
-
-  @@map("governanca_membros")
 }
