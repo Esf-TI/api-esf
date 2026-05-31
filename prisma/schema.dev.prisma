@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Admin {
+  id         Int      @id @default(autoincrement())
+  nome       String
+  email      String   @unique
+  senha      String
+  role       String   @default("admin")
+  status     String   @default("active")
+  last_login DateTime?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tokens         AdminToken[]
+  logs           AdminLog[]
+  audit_logs     AdminAuditLog[]
+  blog_posts     Blog[]
+  anais          Anais[]
+  documentos_transparencia DocumentoTransparencia[]
+  nucleos_approved Nucleo[] @relation("ApprovedBy")
+  contatos_replied ContatoMessage[] @relation("RepliedBy")
+}
+
+model AdminToken {
+  id                  Int      @id @default(autoincrement())
+  adminId             Int
+  accessToken         String
+  refreshToken        String
+  accessTokenExpires  DateTime
+  refreshTokenExpires DateTime
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+}
+
+model AdminLog {
+  id        Int      @id @default(autoincrement())
+  adminId   Int?
+  action    String
+  details   Json?
+  timestamp DateTime @default(now())
+
+  admin Admin? @relation(fields: [adminId], references: [id], onDelete: SetNull)
+}
+
+model AdminAuditLog {
+  id          Int      @id @default(autoincrement())
+  adminId     Int?
+  action      String
+  entityType  String
+  entityId    Int?
+  changes     Json?
+  ipAddress   String?
+  userAgent   String?
+  timestamp   DateTime @default(now())
+
+  admin Admin? @relation(fields: [adminId], references: [id], onDelete: SetNull)
+}
+
+model Blog {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String
+  content     String
+  image       String
+  author_id   Int?
+  tags        String?
+  status      String   @default("draft")
+  slug        String
+  published_at DateTime?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  author Admin? @relation(fields: [author_id], references: [id])
+}
+
+model Anais {
+  id          Int      @id @default(autoincrement())
+  titulo      String
+  descricao   String
+  arquivo_url String
+  arquivo_nome String
+  arquivo_tamanho Int?
+  created_by  Int?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  creator Admin? @relation(fields: [created_by], references: [id])
+}
+
+model DocumentoTransparencia {
+  id          Int      @id @default(autoincrement())
+  titulo      String
+  descricao   String?
+  categoria   String
+  arquivo_url String
+  arquivo_nome String
+  arquivo_tamanho Int?
+  created_by  Int?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  creator Admin? @relation(fields: [created_by], references: [id])
+}
+
+model Nucleo {
+  id                Int      @id @default(autoincrement())
+  nome              String
+  email             String
+  telefone          String
+  endereco          String
+  cidade            String
+  estado            String
+  cep               String
+  status            String   @default("pending")
+  aprovado_por      Int?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  approved_by Admin? @relation("ApprovedBy", fields: [aprovado_por], references: [id])
+}
+
+model ContatoMessage {
+  id        Int      @id @default(autoincrement())
+  nome      String
+  email     String
+  telefone  String
+  assunto   String
+  mensagem  String
+  respondido Boolean  @default(false)
+  respondido_por Int?
+  resposta  String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  replied_by Admin? @relation("RepliedBy", fields: [respondido_por], references: [id])
+}
