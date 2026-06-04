@@ -8,6 +8,7 @@ const {
   assignSlugsToList,
   resolveNucleoFromParam,
 } = require("../lib/nucleoSlug")
+const { getPagination } = require("../lib/pagination")
 require("dotenv").config()
 
 /** Piso para displayTotal quando há poucos cadastros aprovados (alinhado ao `DEFAULT_NUCLEOS_EXIBICAO_PISO` no front). */
@@ -366,33 +367,36 @@ const interestFoundingNucleo = async (req, res) => {
     text: `${name} está interessado em fundar um núcleo!\n\nCidade: ${city}\n\nMensagem: ${history}`,
   }
 
-  try {
-    await transporter.sendMail(mailOptions)
-    res.send("success")
-  } catch (error) {
-    console.error(error)
-    res.status(500).send("error")
-  }
+  // Envia o e-mail fora do caminho da resposta: não bloqueia o cliente esperando o SMTP.
+  transporter
+    .sendMail(mailOptions)
+    .catch((error) => console.error("[interestFoundingNucleo] Falha ao enviar e-mail:", error.message))
+
+  return res.send("success")
 }
 
 const GetNucleosAprovados = async (req, res) => {
   try {
-    const nucleos = await prisma.nucleo.findMany({
-      where: { status: "approved" },
-      orderBy: { Nome: "asc" },
-      select: {
-        id: true, Nome: true, Email: true, Cidade: true, Estado: true, Descricao: true,
-        DataFundacao: true, fotoCapa: true, linkDoacao: true, linkSite: true,
-        linkLinkedin: true, linkFacebook: true, linkInstagram: true, subdominio: true,
-        _count: { select: { projetos: true } },
-      },
-    })
+    const pag = getPagination(req.query)
+    const [nucleos, totalCadastrados] = await Promise.all([
+      prisma.nucleo.findMany({
+        where: { status: "approved" },
+        orderBy: { Nome: "asc" },
+        select: {
+          id: true, Nome: true, Email: true, Cidade: true, Estado: true, Descricao: true,
+          DataFundacao: true, fotoCapa: true, linkDoacao: true, linkSite: true,
+          linkLinkedin: true, linkFacebook: true, linkInstagram: true, subdominio: true,
+          _count: { select: { projetos: true } },
+        },
+        ...(pag.enabled ? { take: pag.take, skip: pag.skip } : {}),
+      }),
+      prisma.nucleo.count({ where: { status: "approved" } }),
+    ])
 
     const formatted = assignSlugsToList(nucleos).map((n) => ({
       ...n,
       totalProjetos: n._count.projetos,
     }))
-    const totalCadastrados = formatted.length
 
     const envExibicao = parseInt(process.env.NUCLEOS_EXIBICAO_PUBLICA || "", 10)
     const rawPiso = process.env.NUCLEOS_EXIBICAO_PISO

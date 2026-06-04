@@ -2,6 +2,7 @@ const express = require("express")
 const router = express.Router()
 const BlogController = require("../controllers/BlogController")
 const { authenticateAdmin } = require("../middlewares/authFunctions")
+const { publicCache } = require("../middlewares/cacheControl")
 const prisma = require("../lib/prismaClient")
 const multer = require("multer")
 const { uploadPublicBuffer } = require("../lib/storageService")
@@ -33,12 +34,12 @@ const uploadBlogImageToSupabase = async (req, res, next) => {
 }
 
 router.post("/createBlog", authenticateAdmin, upload.single("image"), uploadBlogImageToSupabase, BlogController.CreateBlog)
-router.get("/blog", BlogController.returnAllBlog)
+router.get("/blog", publicCache(60), BlogController.returnAllBlog)
 router.get("/admin/blog", authenticateAdmin, (req, res) => {
   req.query.status = req.query.status || null
   BlogController.returnAllBlog(req, res)
 })
-router.get("/blog/:id", BlogController.returnBlogById)
+router.get("/blog/:id", publicCache(60), BlogController.returnBlogById)
 router.patch("/updateBlog/:id", authenticateAdmin, upload.single("image"), uploadBlogImageToSupabase, BlogController.updateBlog)
 router.delete("/blog/:id", authenticateAdmin, BlogController.deleteBlog)
 

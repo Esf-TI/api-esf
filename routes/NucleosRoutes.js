@@ -2,6 +2,7 @@ const express = require("express")
 const router = express.Router()
 const NucleosControllers = require("../controllers/NucleosControllers")
 const { authenticateAdmin, authenticateNucleo } = require("../middlewares/authFunctions")
+const { publicCache } = require("../middlewares/cacheControl")
 
 const multer = require("multer")
 
@@ -39,10 +40,10 @@ router.post("/login", NucleosControllers.LoginNucleo)
 router.get("/nucleos", NucleosControllers.GetAllNucleos)
 
 //RETORNAR APENAS OS NÚCLEOS APROVADOS
-router.get("/nucleosaprovados", NucleosControllers.GetNucleosAprovados)
+router.get("/nucleosaprovados", publicCache(60), NucleosControllers.GetNucleosAprovados)
 
 //RETORNAR  UM NUCLEO ESPECÍFICO
-router.get("/nucleos/:id", NucleosControllers.GetNucleoById)
+router.get("/nucleos/:id", publicCache(60), NucleosControllers.GetNucleoById)
 
 //ROTA PARA ATUALIZAR O STATUS DE UM NÚCLEO ( VALORES POSSÍVEIS: pending, reproved, approved)
 router.patch("/status/:id", authenticateAdmin, NucleosControllers.updateNucleoStatus)
