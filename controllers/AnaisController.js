@@ -1,5 +1,26 @@
 const prisma = require("../lib/prismaClient")
 const { validationResult } = require("express-validator")
+const { getPagination, buildMeta } = require("../lib/pagination")
+
+// Campos leves para listagem (evita trafegar JSON pesado de authors/keywords nas listas).
+const LIST_SELECT = {
+  id: true,
+  title: true,
+  description: true,
+  year: true,
+  event_name: true,
+  cover_image_url: true,
+  pdf_url: true,
+  category: true,
+  status: true,
+  authors: true,
+  pages: true,
+  isbn: true,
+  downloads: true,
+  views: true,
+  featured: true,
+  created_at: true,
+}
 
 const validCategories = ["Sustentabilidade", "Infraestrutura e Assistência Básica", "Gestão e Empreendedorismo", "Educação"]
 const validStatus = ["active", "archived"]
@@ -20,12 +41,18 @@ class AnaisController {
         ]
       }
 
-      const anais = await prisma.anais.findMany({
-        where,
-        orderBy: [{ year: "desc" }, { created_at: "desc" }],
-      })
+      const pag = getPagination(req.query)
+      const [anais, total] = await Promise.all([
+        prisma.anais.findMany({
+          where,
+          select: LIST_SELECT,
+          orderBy: [{ year: "desc" }, { created_at: "desc" }],
+          ...(pag.enabled ? { take: pag.take, skip: pag.skip } : {}),
+        }),
+        pag.enabled ? prisma.anais.count({ where }) : Promise.resolve(undefined),
+      ])
 
-      return res.status(200).json({ success: true, count: anais.length, data: anais })
+      return res.status(200).json({ success: true, count: anais.length, data: anais, pagination: buildMeta(total, pag) })
     } catch (error) {
       console.error("Error fetching published anais:", error)
       return res.status(500).json({ success: false, message: "Erro ao buscar publicações", error: error.message })
@@ -48,12 +75,18 @@ class AnaisController {
         ]
       }
 
-      const anais = await prisma.anais.findMany({
-        where,
-        orderBy: [{ year: "desc" }, { created_at: "desc" }],
-      })
+      const pag = getPagination(req.query)
+      const [anais, total] = await Promise.all([
+        prisma.anais.findMany({
+          where,
+          select: LIST_SELECT,
+          orderBy: [{ year: "desc" }, { created_at: "desc" }],
+          ...(pag.enabled ? { take: pag.take, skip: pag.skip } : {}),
+        }),
+        pag.enabled ? prisma.anais.count({ where }) : Promise.resolve(undefined),
+      ])
 
-      return res.status(200).json({ success: true, count: anais.length, data: anais })
+      return res.status(200).json({ success: true, count: anais.length, data: anais, pagination: buildMeta(total, pag) })
     } catch (error) {
       console.error("Error fetching anais:", error)
       return res.status(500).json({ success: false, message: "Erro ao buscar publicações", error: error.message })
