@@ -1,6 +1,7 @@
 const express = require("express")
 const router = express.Router()
 const AnaisController = require("../controllers/AnaisController")
+const { publicCache } = require("../middlewares/cacheControl")
 const { body } = require("express-validator")
 
 // Validações para criação de anais
@@ -13,10 +14,10 @@ const createValidation = [
 ]
 
 // Rotas públicas
-router.get("/published", AnaisController.indexPublished) // NOVA ROTA: Apenas publicadas
+router.get("/published", publicCache(60), AnaisController.indexPublished) // NOVA ROTA: Apenas publicadas
 router.get("/", AnaisController.index) // Admin: todas as publicações
-router.get("/stats", AnaisController.stats)
-router.get("/:id", AnaisController.show)
+router.get("/stats", publicCache(120), AnaisController.stats)
+router.get("/:id", publicCache(60), AnaisController.show)
 
 // Rotas administrativas (adicionar middleware de autenticação aqui)
 router.post("/", createValidation, AnaisController.store)

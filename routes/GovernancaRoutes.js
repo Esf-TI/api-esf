@@ -2,6 +2,7 @@ const express = require("express")
 const router = express.Router()
 const multer = require("multer")
 const { authenticateAdmin } = require("../middlewares/authFunctions")
+const { publicCache } = require("../middlewares/cacheControl")
 const GovernancaController = require("../controllers/GovernancaController")
 
 const upload = multer({
@@ -9,7 +10,7 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 })
 
-router.get("/", GovernancaController.listarPublico)
+router.get("/", publicCache(120), GovernancaController.listarPublico)
 router.get("/admin/todos", authenticateAdmin, GovernancaController.listarTodos)
 router.post("/", authenticateAdmin, upload.single("foto"), GovernancaController.criar)
 router.put("/:id", authenticateAdmin, upload.single("foto"), GovernancaController.atualizar)
