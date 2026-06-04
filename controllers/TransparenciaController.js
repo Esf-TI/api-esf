@@ -1,6 +1,7 @@
 const prisma = require("../lib/prismaClient")
 const supabase = require("../lib/supabaseClient")
 const { uploadPublicBuffer } = require("../lib/storageService")
+const { getPagination, buildMeta } = require("../lib/pagination")
 
 const BUCKET = "transparencia"
 
@@ -9,12 +10,17 @@ const TransparenciaController = {
     try {
       const { categoria } = req.query
       const where = categoria ? { categoria } : {}
-      const documentos = await prisma.documentoTransparencia.findMany({
-        where,
-        orderBy: { created_at: "desc" },
-        include: { creator: { select: { id: true, nome: true } } },
-      })
-      res.json({ success: true, data: documentos })
+      const pag = getPagination(req.query)
+      const [documentos, total] = await Promise.all([
+        prisma.documentoTransparencia.findMany({
+          where,
+          orderBy: { created_at: "desc" },
+          include: { creator: { select: { id: true, nome: true } } },
+          ...(pag.enabled ? { take: pag.take, skip: pag.skip } : {}),
+        }),
+        pag.enabled ? prisma.documentoTransparencia.count({ where }) : Promise.resolve(undefined),
+      ])
+      res.json({ success: true, data: documentos, pagination: buildMeta(total, pag) })
     } catch (error) {
       console.error("Erro ao listar documentos:", error)
       res.status(500).json({ success: false, message: "Erro ao listar documentos" })

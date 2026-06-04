@@ -2,6 +2,7 @@ const express = require("express")
 const router = express.Router()
 const multer = require("multer")
 const { authenticateAdmin } = require("../middlewares/authFunctions")
+const { publicCache } = require("../middlewares/cacheControl")
 const TransparenciaController = require("../controllers/TransparenciaController")
 
 const upload = multer({
@@ -10,9 +11,9 @@ const upload = multer({
 })
 
 // Rotas públicas (listagem para o site)
-router.get("/", TransparenciaController.listar)
-router.get("/categorias", TransparenciaController.listarCategorias)
-router.get("/:id", TransparenciaController.buscarPorId)
+router.get("/", publicCache(60), TransparenciaController.listar)
+router.get("/categorias", publicCache(120), TransparenciaController.listarCategorias)
+router.get("/:id", publicCache(60), TransparenciaController.buscarPorId)
 
 // Rotas protegidas (admin)
 router.post("/", authenticateAdmin, upload.array("arquivos", 20), TransparenciaController.criar)

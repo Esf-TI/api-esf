@@ -5,6 +5,7 @@ const multer = require("multer")
 
 const uploadProjects = require("../middlewares/uploadsProjects")
 const uploadImage = require("../middlewares/storageUpload")
+const { publicCache } = require("../middlewares/cacheControl")
 const supabase = require("../lib/supabaseClient")
 const { optimizeImage } = require("../lib/imageOptimizer")
 
@@ -70,13 +71,13 @@ router.post("/projetos", multiUpload, uploadProjects, ProjetcsControllers.create
 router.post("/projetos1", ProjetcsControllers.createProjectDentro)
 
 // RETORNAR TODOS OS PROJETOS
-router.get("/projetos", ProjetcsControllers.returnProjects)
+router.get("/projetos", publicCache(60), ProjetcsControllers.returnProjects)
 
 // RETORNAR TODOS PROJETOS DE UM NÚCLEO
-router.get("/projetos/nucleos/:nucleoId", ProjetcsControllers.returnProjectsNucleo)
+router.get("/projetos/nucleos/:nucleoId", publicCache(60), ProjetcsControllers.returnProjectsNucleo)
 
 // RETORNAR UM PROJETO ESPECÍFICO
-router.get("/projetos/:id", ProjetcsControllers.returnProjectById)
+router.get("/projetos/:id", publicCache(60), ProjetcsControllers.returnProjectById)
 
 // ALTERAR TODOS OS CAMPOS (com fotos via Supabase Storage)
 router.put("/projetos/:id", multiUpload, uploadProjects, ProjetcsControllers.editProjectById)

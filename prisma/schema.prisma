@@ -7,24 +7,26 @@ datasource db {
 }
 
 model Admin {
-  id         Int      @id @default(autoincrement())
-  nome       String   @db.VarChar(255)
-  email      String   @unique @db.VarChar(255)
-  senha      String   @db.VarChar(255)
-  role       String   @default("admin") @db.VarChar(50)
-  status     String   @default("active") @db.VarChar(50)
+  id         Int       @id @default(autoincrement())
+  nome       String    @db.VarChar(255)
+  email      String    @unique @db.VarChar(255)
+  senha      String    @db.VarChar(255)
+  role       String    @default("admin") @db.VarChar(50)
+  status     String    @default("active") @db.VarChar(50)
   last_login DateTime?
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
 
-  tokens         AdminToken[]
-  logs           AdminLog[]
-  audit_logs     AdminAuditLog[]
-  blog_posts     Blog[]
-  anais          Anais[]
+  tokens                   AdminToken[]
+  logs                     AdminLog[]
+  audit_logs               AdminAuditLog[]
+  blog_posts               Blog[]
+  anais                    Anais[]
   documentos_transparencia DocumentoTransparencia[]
-  nucleos_approved Nucleo[] @relation("ApprovedBy")
-  contatos_replied ContatoMessage[] @relation("RepliedBy")
+  nucleos_approved         Nucleo[]                 @relation("ApprovedBy")
+  contatos_replied         ContatoMessage[]         @relation("RepliedBy")
+
+  @@index([status])
 }
 
 model AdminToken {
@@ -38,6 +40,8 @@ model AdminToken {
   updatedAt           DateTime @updatedAt
 
   admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
 }
 
 model AdminLog {
@@ -48,6 +52,9 @@ model AdminLog {
   timestamp DateTime @default(now())
 
   admin Admin? @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([adminId])
+  @@index([timestamp])
 }
 
 model AdminAuditLog {
@@ -62,6 +69,9 @@ model AdminAuditLog {
   created_at  DateTime @default(now())
 
   admin Admin @relation(fields: [admin_id], references: [id], onDelete: Cascade)
+
+  @@index([admin_id])
+  @@index([created_at])
 }
 
 model Blog {
@@ -82,41 +92,52 @@ model Blog {
   published_at     DateTime?
 
   author Admin? @relation(fields: [author_id], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([author_id])
+  @@index([featured])
+  @@index([created_at])
 }
 
 model Nucleo {
-  id             Int       @id @default(autoincrement())
-  Nome           String    @db.VarChar(255)
-  Email          String    @unique @db.VarChar(255)
-  Senha          String    @db.VarChar(255)
-  Cidade         String?   @db.VarChar(255)
-  Estado         String?   @db.VarChar(255)
-  subdominio     String?   @unique @db.VarChar(255)
-  Descricao      String?   @db.Text
-  DataFundacao   DateTime? @db.Date
-  fotoCapa       String?   @db.VarChar(500)
-  foto1          String?   @db.VarChar(500)
-  foto2          String?   @db.VarChar(500)
-  foto3          String?   @db.VarChar(500)
-  linkDoacao     String?   @db.VarChar(255)
-  linkSite       String?   @db.VarChar(255)
-  linkLinkedin   String?   @db.VarChar(255)
-  linkFacebook   String?   @db.VarChar(255)
-  linkInstagram  String?   @db.VarChar(255)
-  logoUrl        String?   @db.VarChar(500)
-  corPrimaria    String?   @db.VarChar(20)
-  Endereco       String?   @db.VarChar(500)
-  status         String    @default("pending") @db.VarChar(50)
-  rejection_reason String? @db.Text
-  approved_by    Int?
-  approved_at    DateTime?
-  Token          String?   @db.VarChar(512)
-  created_at     DateTime  @default(now())
-  updated_at     DateTime  @updatedAt
+  id               Int       @id @default(autoincrement())
+  Nome             String    @db.VarChar(255)
+  Email            String    @unique @db.VarChar(255)
+  Senha            String    @db.VarChar(255)
+  Cidade           String?   @db.VarChar(255)
+  Estado           String?   @db.VarChar(255)
+  subdominio       String?   @unique @db.VarChar(255)
+  Descricao        String?   @db.Text
+  DataFundacao     DateTime? @db.Date
+  fotoCapa         String?   @db.VarChar(500)
+  foto1            String?   @db.VarChar(500)
+  foto2            String?   @db.VarChar(500)
+  foto3            String?   @db.VarChar(500)
+  linkDoacao       String?   @db.VarChar(255)
+  linkSite         String?   @db.VarChar(255)
+  linkLinkedin     String?   @db.VarChar(255)
+  linkFacebook     String?   @db.VarChar(255)
+  linkInstagram    String?   @db.VarChar(255)
+  logoUrl          String?   @db.VarChar(500)
+  corPrimaria      String?   @db.VarChar(20)
+  Endereco         String?   @db.VarChar(500)
+  status           String    @default("pending") @db.VarChar(50)
+  rejection_reason String?   @db.Text
+  approved_by      Int?
+  approved_at      DateTime?
+  Token            String?   @db.VarChar(512)
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
 
-  approver  Admin?    @relation("ApprovedBy", fields: [approved_by], references: [id], onDelete: SetNull)
-  projetos  Projeto[]
-  tokens    NucleoToken[]
+  approver Admin?        @relation("ApprovedBy", fields: [approved_by], references: [id], onDelete: SetNull)
+  projetos Projeto[]
+  tokens   NucleoToken[]
+
+  @@index([status])
+  @@index([Estado])
+  @@index([Cidade])
+  @@index([approved_by])
+  @@index([created_at])
 }
 
 model NucleoToken {
@@ -129,6 +150,8 @@ model NucleoToken {
   created_at          DateTime @default(now())
 
   nucleo Nucleo @relation(fields: [nucleoId], references: [id], onDelete: Cascade)
+
+  @@index([nucleoId])
 }
 
 model Projeto {
@@ -153,49 +176,62 @@ model Projeto {
 
   nucleo Nucleo? @relation(fields: [NucleoResponsavel], references: [id], onDelete: Cascade)
 
+  @@index([NucleoResponsavel])
+  @@index([status])
+  @@index([Area])
   @@map("Projetos")
 }
 
 model Anais {
-  id               Int       @id @default(autoincrement())
-  title            String    @db.VarChar(255)
-  description      String?   @db.Text
-  year             Int
-  event_name       String?   @db.VarChar(255)
-  pdf_url          String    @db.VarChar(500)
-  cover_image_url  String?   @db.VarChar(500)
-  authors          Json?
-  pages            Int?
-  isbn             String?   @db.VarChar(50)
-  doi              String?   @db.VarChar(100)
-  keywords         Json?
-  category         String    @default("technical") @db.VarChar(100)
-  status           String    @default("active") @db.VarChar(50)
-  downloads        Int       @default(0)
-  views            Int       @default(0)
-  featured         Boolean   @default(false)
-  created_by       Int?
-  created_at       DateTime  @default(now())
-  updated_at       DateTime  @updatedAt
-  published_at     DateTime?
+  id              Int       @id @default(autoincrement())
+  title           String    @db.VarChar(255)
+  description     String?   @db.Text
+  year            Int
+  event_name      String?   @db.VarChar(255)
+  pdf_url         String    @db.VarChar(500)
+  cover_image_url String?   @db.VarChar(500)
+  authors         Json?
+  pages           Int?
+  isbn            String?   @db.VarChar(50)
+  doi             String?   @db.VarChar(100)
+  keywords        Json?
+  category        String    @default("technical") @db.VarChar(100)
+  status          String    @default("active") @db.VarChar(50)
+  downloads       Int       @default(0)
+  views           Int       @default(0)
+  featured        Boolean   @default(false)
+  created_by      Int?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+  published_at    DateTime?
 
   creator Admin? @relation(fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@index([category])
+  @@index([year])
+  @@index([status])
+  @@index([featured])
+  @@index([created_by])
+  @@index([created_at])
 }
 
 model DocumentoTransparencia {
-  id          Int      @id @default(autoincrement())
-  titulo      String   @db.VarChar(255)
-  descricao   String?  @db.Text
-  categoria   String   @db.VarChar(100)
-  arquivo_url String   @db.VarChar(500)
-  arquivo_nome String  @db.VarChar(255)
+  id              Int      @id @default(autoincrement())
+  titulo          String   @db.VarChar(255)
+  descricao       String?  @db.Text
+  categoria       String   @db.VarChar(100)
+  arquivo_url     String   @db.VarChar(500)
+  arquivo_nome    String   @db.VarChar(255)
   arquivo_tamanho Int?
-  created_by  Int?
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
+  created_by      Int?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
 
   creator Admin? @relation(fields: [created_by], references: [id], onDelete: SetNull)
 
+  @@index([categoria])
+  @@index([created_by])
+  @@index([created_at])
   @@map("documentos_transparencia")
 }
 
@@ -211,6 +247,8 @@ model GovernancaMembro {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
+  @@index([conselho])
+  @@index([ativo])
   @@map("governanca_membros")
 }
 
@@ -228,5 +266,8 @@ model ContatoMessage {
 
   replier Admin? @relation("RepliedBy", fields: [replied_by], references: [id], onDelete: SetNull)
 
+  @@index([status])
+  @@index([replied_by])
+  @@index([created_at])
   @@map("contato_messages")
 }
