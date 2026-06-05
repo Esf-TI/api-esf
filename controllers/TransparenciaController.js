@@ -5,6 +5,17 @@ const { getPagination, buildMeta } = require("../lib/pagination")
 
 const BUCKET = "transparencia"
 
+// O multer entrega file.originalname em latin1; re-decodifica para UTF-8
+// (corrige acentos: "EleiÃ§Ã£o" -> "Eleição").
+function fixFileName(name) {
+  if (!name) return name
+  try {
+    return Buffer.from(name, "latin1").toString("utf8")
+  } catch {
+    return name
+  }
+}
+
 const TransparenciaController = {
   async listar(req, res) {
     try {
@@ -60,23 +71,21 @@ const TransparenciaController = {
       const documentosCriados = []
 
       for (const file of arquivos) {
+        const nomeArquivo = fixFileName(file.originalname)
         const { objectPath, publicUrl } = await uploadPublicBuffer({
           bucket: BUCKET,
           folder: categoria.toLowerCase().replace(/\s+/g, "-"),
           file,
         })
 
-        const tituloDoc = arquivos.length === 1
-          ? titulo
-          : `${titulo} - ${file.originalname}`
-
         const documento = await prisma.documentoTransparencia.create({
           data: {
-            titulo: tituloDoc,
+            // Mantém o título do grupo; o nome do arquivo fica em arquivo_nome.
+            titulo,
             descricao: descricao || null,
             categoria,
             arquivo_url: publicUrl,
-            arquivo_nome: file.originalname,
+            arquivo_nome: nomeArquivo,
             arquivo_tamanho: file.size,
             created_by: req.admin?.id || null,
           },
@@ -132,7 +141,7 @@ const TransparenciaController = {
         })
 
         dadosAtualizar.arquivo_url = publicUrl
-        dadosAtualizar.arquivo_nome = req.file.originalname
+        dadosAtualizar.arquivo_nome = fixFileName(req.file.originalname)
         dadosAtualizar.arquivo_tamanho = req.file.size
       }
 
