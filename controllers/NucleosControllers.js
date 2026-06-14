@@ -2,7 +2,7 @@ const bcrypt = require("bcrypt")
 const jwt = require("jsonwebtoken")
 const nodemailer = require("nodemailer")
 const prisma = require("../lib/prismaClient")
-const { generateTokens } = require("../middlewares/authFunctions")
+const { generateTokens, refreshAccessToken } = require("../middlewares/authFunctions")
 const {
   buildNucleoSlug,
   assignSlugsToList,
@@ -226,6 +226,27 @@ const LoginNucleo = async (req, res) => {
   } catch (error) {
     console.error("Erro ao tentar fazer o login:", error)
     return res.status(500).send("Erro ao tentar fazer o login")
+  }
+}
+
+const RefreshNucleoToken = async (req, res) => {
+  try {
+    const refreshToken = req.body.refreshToken || req.cookies?.refreshToken || req.headers["x-refresh-token"]
+
+    if (!refreshToken) {
+      return res.status(401).json({ success: false, message: "Refresh token não fornecido", code: "MISSING_REFRESH_TOKEN" })
+    }
+
+    const newTokens = await refreshAccessToken(refreshToken)
+
+    if (newTokens) {
+      res.json({ success: true, data: newTokens })
+    } else {
+      res.status(401).json({ success: false, message: "Token inválido ou expirado", code: "INVALID_REFRESH_TOKEN" })
+    }
+  } catch (error) {
+    console.error("Error refreshing nucleo tokens:", error)
+    res.status(500).json({ success: false, message: "Erro interno do servidor" })
   }
 }
 
@@ -469,6 +490,7 @@ module.exports = {
   CreateNucleo,
   CreateNucleoByAdmin,
   LoginNucleo,
+  RefreshNucleoToken,
   GetAllNucleos,
   GetNucleoById,
   updateNucleoStatus,
