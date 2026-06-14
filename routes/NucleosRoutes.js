@@ -36,6 +36,9 @@ router.patch("/photo/:id", authenticateNucleo, photo, uploadImage, NucleosContro
 //LOGAR COMO NÚCLEO
 router.post("/login", NucleosControllers.LoginNucleo)
 
+//RENOVAR TOKEN DE ACESSO DO NÚCLEO (usado pelo interceptor do front em /nucleos/auth/refresh)
+router.post("/auth/refresh", NucleosControllers.RefreshNucleoToken)
+
 //RETORNAR TODOS OS NÚCLEOS ( PARA ADMIN )
 router.get("/nucleos", NucleosControllers.GetAllNucleos)
 
