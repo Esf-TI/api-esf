@@ -7,6 +7,8 @@ const {
   buildNucleoSlug,
   assignSlugsToList,
   resolveNucleoFromParam,
+  NUCLEO_PUBLIC_SELECT,
+  NUCLEO_ADMIN_SELECT,
 } = require("../lib/nucleoSlug")
 const { getPagination } = require("../lib/pagination")
 require("dotenv").config()
@@ -271,6 +273,9 @@ const GetAllNucleos = async (req, res) => {
       ]
     }
 
+    // Allow-list de campos: nunca devolve `Senha`/`Token`. Admin autenticado vê dados de contato.
+    const select = req.admin ? NUCLEO_ADMIN_SELECT : NUCLEO_PUBLIC_SELECT
+
     const [total, nucleos] = await Promise.all([
       prisma.nucleo.count({ where }),
       prisma.nucleo.findMany({
@@ -278,7 +283,7 @@ const GetAllNucleos = async (req, res) => {
         orderBy: { [safeSortBy]: safeSortOrder },
         skip,
         take: limitNum,
-        include: { _count: { select: { projetos: true } } },
+        select: { ...select, _count: { select: { projetos: true } } },
       }),
     ])
 
@@ -293,7 +298,8 @@ const GetAllNucleos = async (req, res) => {
 
 const GetNucleoById = async (req, res) => {
   try {
-    const nucleo = await resolveNucleoFromParam(req.params.id)
+    // Admins autenticados recebem campos de contato/moderação; o público, não.
+    const nucleo = await resolveNucleoFromParam(req.params.id, { includePrivate: Boolean(req.admin) })
     if (!nucleo) return res.status(404).send("Núcleo não encontrado")
     const slug = buildNucleoSlug(nucleo)
     return res.status(200).json({ ...nucleo, slug })
@@ -403,12 +409,8 @@ const GetNucleosAprovados = async (req, res) => {
       prisma.nucleo.findMany({
         where: { status: "approved" },
         orderBy: { Nome: "asc" },
-        select: {
-          id: true, Nome: true, Email: true, Cidade: true, Estado: true, Descricao: true,
-          DataFundacao: true, fotoCapa: true, linkDoacao: true, linkSite: true,
-          linkLinkedin: true, linkFacebook: true, linkInstagram: true, subdominio: true,
-          _count: { select: { projetos: true } },
-        },
+        // Endpoint público: somente campos públicos (sem `Senha`/`Email`/`Token`).
+        select: { ...NUCLEO_PUBLIC_SELECT, _count: { select: { projetos: true } } },
         ...(pag.enabled ? { take: pag.take, skip: pag.skip } : {}),
       }),
       prisma.nucleo.count({ where: { status: "approved" } }),
