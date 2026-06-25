@@ -15,6 +15,7 @@
     "studio": "npx prisma studio",
     "seed": "node scripts/seed-admin.js",
     "seed:transparencia": "node scripts/seed-transparencia-padrao.js",
+    "seed:governanca": "node scripts/seed-governanca-renomear-conselhos.js",
     "migrate:uploads": "node scripts/migrate-uploads-to-supabase.js",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
@@ -30,7 +31,6 @@
     "basic-ftp": "^5.0.5",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-validator": "^7.3.1",
     "jsonwebtoken": "^9.0.2",
@@ -43,6 +43,7 @@
     "sharp": "^0.34.5"
   },
   "devDependencies": {
+    "dotenv": "^17.4.2",
     "nodemon": "^3.0.1"
   }
 }
