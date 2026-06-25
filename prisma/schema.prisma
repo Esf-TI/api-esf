@@ -22,6 +22,7 @@ model Admin {
   audit_logs               AdminAuditLog[]
   blog_posts               Blog[]
   anais                    Anais[]
+  livros                   Livro[]
   documentos_transparencia DocumentoTransparencia[]
   nucleos_approved         Nucleo[]                 @relation("ApprovedBy")
   contatos_replied         ContatoMessage[]         @relation("RepliedBy")
@@ -250,6 +251,34 @@ model GovernancaMembro {
   @@index([conselho])
   @@index([ativo])
   @@map("governanca_membros")
+}
+
+model Livro {
+  id          Int      @id @default(autoincrement())
+  titulo      String   @db.VarChar(255)
+  descricao   String?  @db.Text
+  autores     Json?
+  editora     String?  @db.VarChar(255)
+  ano         Int
+  edicao      String?  @db.VarChar(50)
+  isbn        String?  @db.VarChar(50)
+  capa_url    String?  @db.VarChar(500)
+  pdf_url     String?  @db.VarChar(500)
+  link_compra String?  @db.VarChar(500)
+  status      String   @default("active") @db.VarChar(50)
+  featured    Boolean  @default(false)
+  created_by  Int?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  creator Admin? @relation(fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([ano])
+  @@index([featured])
+  @@index([created_by])
+  @@index([created_at])
+  @@map("livros")
 }
 
 model ContatoMessage {
