@@ -24,6 +24,7 @@ model Admin {
   anais                    Anais[]
   livros                   Livro[]
   documentos_transparencia DocumentoTransparencia[]
+  resultados               Resultado[]
   nucleos_approved         Nucleo[]                 @relation("ApprovedBy")
   contatos_replied         ContatoMessage[]         @relation("RepliedBy")
 
@@ -279,6 +280,25 @@ model Livro {
   @@index([created_by])
   @@index([created_at])
   @@map("livros")
+}
+
+model Resultado {
+  id              Int      @id @default(autoincrement())
+  titulo          String   @db.VarChar(255)
+  ano             Int?
+  arquivo_url     String   @db.VarChar(500)
+  arquivo_nome    String   @db.VarChar(255)
+  arquivo_tamanho Int?
+  ordem           Int      @default(0)
+  created_by      Int?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  creator Admin? @relation(fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@index([ordem])
+  @@index([created_by])
+  @@map("resultados")
 }
 
 model ContatoMessage {
