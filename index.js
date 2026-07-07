@@ -20,6 +20,7 @@ const AnaisRoutes = require("./routes/AnaisRoutes")
 const LivrosRoutes = require("./routes/LivrosRoutes")
 const TransparenciaRoutes = require("./routes/TransparenciaRoutes")
 const GovernancaRoutes = require("./routes/GovernancaRoutes")
+const ResultadosRoutes = require("./routes/ResultadosRoutes")
 const uploadRouter = require("./routes/UploadRouter")
 const MigrationRoutes = require("./routes/MigrationRoutes")
 
@@ -33,6 +34,7 @@ app.use("/anais", AnaisRoutes)
 app.use("/livros", LivrosRoutes)
 app.use("/transparencia", TransparenciaRoutes)
 app.use("/governanca", GovernancaRoutes)
+app.use("/resultados", ResultadosRoutes)
 app.use("/admin", MigrationRoutes)
 
 // Health check
