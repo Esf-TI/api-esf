@@ -7,6 +7,7 @@ const {
   buildNucleoSlug,
   assignSlugsToList,
   resolveNucleoFromParam,
+  generateUniqueSubdominio,
   NUCLEO_PUBLIC_SELECT,
   NUCLEO_ADMIN_SELECT,
 } = require("../lib/nucleoSlug")
@@ -87,6 +88,9 @@ const CreateNucleo = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(senha, 12)
 
+    // Garante slug único: `subdominio` é @unique; slugs repetidos quebrariam o cadastro.
+    const subdominio = await generateUniqueSubdominio({ Nome: nomeNucleo, Cidade: cidade, Estado: estado })
+
     const nucleo = await prisma.nucleo.create({
       data: {
         Nome: nomeNucleo,
@@ -103,11 +107,7 @@ const CreateNucleo = async (req, res) => {
         linkFacebook: linkFacebook || null,
         linkInstagram: linkInstagram || null,
         status: "pending",
-        subdominio: buildNucleoSlug({
-          Nome: nomeNucleo,
-          Cidade: cidade,
-          Estado: estado,
-        }),
+        subdominio,
       },
     })
 
@@ -317,17 +317,21 @@ const updateNucleoStatus = async (req, res) => {
     return res.status(400).json({ success: false, message: "ID do núcleo e novo status são obrigatórios" })
   }
 
-  if (!["approved", "reproved", "pending"].includes(novoStatus)) {
-    return res.status(400).json({ success: false, message: "Status deve ser: approved, reproved ou pending" })
+  // Aceita "reproved" (legado) e normaliza para "rejected", vocabulário usado
+  // pelo painel admin e pelos cards do front (evita status órfão "Indefinido").
+  const statusNormalizado = novoStatus === "reproved" ? "rejected" : novoStatus
+
+  if (!["approved", "rejected", "pending"].includes(statusNormalizado)) {
+    return res.status(400).json({ success: false, message: "Status deve ser: approved, rejected ou pending" })
   }
 
   try {
     const nucleo = await prisma.nucleo.update({
       where: { id: nucleoId },
-      data: { status: novoStatus },
+      data: { status: statusNormalizado },
     })
 
-    res.json({ success: true, message: `Núcleo ${nucleo.Nome} ${novoStatus === "approved" ? "aprovado" : "reprovado"} com sucesso`, data: { nucleoId, nucleoNome: nucleo.Nome, status: novoStatus } })
+    res.json({ success: true, message: `Núcleo ${nucleo.Nome} ${statusNormalizado === "approved" ? "aprovado" : "reprovado"} com sucesso`, data: { nucleoId, nucleoNome: nucleo.Nome, status: statusNormalizado } })
   } catch (error) {
     if (error.code === "P2025") return res.status(404).json({ success: false, message: "Núcleo não encontrado" })
     console.error("Error updating nucleo status:", error)
@@ -454,7 +458,7 @@ const putNucleoWithoutFile = async (req, res) => {
     return res.status(400).json({ success: false, message: "ID do núcleo é obrigatório" })
   }
 
-  const { Nome, Email, Cidade, Descricao, DataFundacao, fotoCapa, foto1, foto2, foto3, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram, logoUrl, corPrimaria, Endereco } = req.body
+  const { Nome, Email, Cidade, Estado, Descricao, DataFundacao, fotoCapa, foto1, foto2, foto3, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram, logoUrl, corPrimaria, Endereco } = req.body
 
   try {
     await prisma.nucleo.update({
@@ -463,6 +467,7 @@ const putNucleoWithoutFile = async (req, res) => {
         ...(Nome && { Nome }),
         ...(Email && { Email }),
         ...(Cidade && { Cidade }),
+        ...(Estado && { Estado }),
         ...(Descricao && { Descricao }),
         ...(DataFundacao && { DataFundacao: new Date(DataFundacao) }),
         ...(fotoCapa && { fotoCapa }),
