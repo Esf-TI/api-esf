@@ -1,7 +1,7 @@
 const express = require("express")
 const router = express.Router()
 const NucleosControllers = require("../controllers/NucleosControllers")
-const { authenticateAdmin, authenticateNucleo } = require("../middlewares/authFunctions")
+const { authenticateAdmin, authenticateNucleo, authenticateAdminOrNucleo, ensureNucleoSelf } = require("../middlewares/authFunctions")
 const { publicCache } = require("../middlewares/cacheControl")
 
 const multer = require("multer")
@@ -26,13 +26,13 @@ const uploadImage = require("../middlewares/storageUpload")
 router.post("/nucleos", photo, uploadImage, NucleosControllers.CreateNucleo)
 
 //UPLOAD DE IMAGEM AVULSA (retorna URL pública no bucket nucleos)
-router.post("/upload-imagem", singleImagem, uploadImage, (req, res) => {
+router.post("/upload-imagem", authenticateAdminOrNucleo, singleImagem, uploadImage, (req, res) => {
   if (!req.file?.publicUrl) return res.status(400).json({ error: "Nenhuma imagem enviada" })
   res.json({ url: req.file.publicUrl })
 })
 
-//ATUALIZA FOTO DO NUCLEO
-router.patch("/photo/:id", authenticateNucleo, photo, uploadImage, NucleosControllers.updateNucleoFoto)
+//ATUALIZA FOTO DO NUCLEO (só o próprio núcleo, ou um admin)
+router.patch("/photo/:id", authenticateAdminOrNucleo, ensureNucleoSelf, photo, uploadImage, NucleosControllers.updateNucleoFoto)
 //LOGAR COMO NÚCLEO
 router.post("/login", NucleosControllers.LoginNucleo)
 
@@ -52,9 +52,10 @@ router.get("/nucleos/:id", publicCache(60), NucleosControllers.GetNucleoById)
 router.patch("/status/:id", authenticateAdmin, NucleosControllers.updateNucleoStatus)
 
 //ROTA PARA EDITAR QUALQUER CAMPO DO BANCO DE DADOS DO NÚCLEO ( EDIÇÃO DO PRÓPRIO NÚCLEO )
-router.patch("/nucleos/:id", authenticateNucleo, NucleosControllers.patchNucleo)
+// `ensureNucleoSelf`: sem isso, um núcleo logado editava os dados de qualquer outro.
+router.patch("/nucleos/:id", authenticateAdminOrNucleo, ensureNucleoSelf, NucleosControllers.patchNucleo)
 
-router.put("/nucleos/:id", authenticateNucleo, NucleosControllers.putNucleoWithoutFile)
+router.put("/nucleos/:id", authenticateAdminOrNucleo, ensureNucleoSelf, NucleosControllers.putNucleoWithoutFile)
 
 router.delete("/nucleos/:id", authenticateAdmin, NucleosControllers.deleteNucleo)
 

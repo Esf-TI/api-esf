@@ -5,7 +5,9 @@ const nucleosController = require("../controllers/NucleosControllers")
 const { authenticateAdmin } = require("../middlewares/authFunctions")
 const prisma = require("../lib/prismaClient")
 
-router.post("/", adminController.create)
+// Criação de administrador: só um admin já autenticado pode criar outro.
+// (O admin inicial é criado pelo bootstrap `ensureDefaultAdmin`, não por esta rota.)
+router.post("/", authenticateAdmin, adminController.create)
 router.post("/auth/refresh", adminController.updateToken)
 router.post("/login", adminController.login)
 

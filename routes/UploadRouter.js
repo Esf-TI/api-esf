@@ -2,6 +2,7 @@ const express = require("express")
 const router = express.Router()
 const multer = require("multer")
 const { uploadPublicBuffer } = require("../lib/storageService")
+const { authenticateAdmin } = require("../middlewares/authFunctions")
 
 const fileFilter = (req, file, cb) => {
   if (file.mimetype === "application/pdf") {
@@ -36,7 +37,7 @@ const uploadImage = multer({
 })
 
 // Rota de upload
-router.post("/anais", upload.single("file"), async (req, res) => {
+router.post("/anais", authenticateAdmin, upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -72,7 +73,7 @@ router.post("/anais", upload.single("file"), async (req, res) => {
 })
 
 // Rota de upload de capa de livro (imagem)
-router.post("/livros", uploadImage.single("file"), async (req, res) => {
+router.post("/livros", authenticateAdmin, uploadImage.single("file"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -108,7 +109,7 @@ router.post("/livros", uploadImage.single("file"), async (req, res) => {
 })
 
 // Rota de upload de PDF do livro
-router.post("/livros-pdf", upload.single("file"), async (req, res) => {
+router.post("/livros-pdf", authenticateAdmin, upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
