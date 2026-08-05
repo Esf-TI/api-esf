@@ -2,6 +2,7 @@ const bcrypt = require("bcrypt")
 const jwt = require("jsonwebtoken")
 const nodemailer = require("nodemailer")
 const prisma = require("../lib/prismaClient")
+const { normalizeEmail, emailWhereInsensitive } = require("../lib/email")
 require("dotenv").config()
 
 // Reutiliza o mesmo segredo base usado nos tokens de acesso.
@@ -28,12 +29,18 @@ function buildTransporter() {
   })
 }
 
-/** Busca a conta (admin tem prioridade) pelo e-mail. Retorna { type, record } ou null. */
+/** Busca a conta (admin tem prioridade) pelo e-mail, ignorando maiúsculas/minúsculas. */
 async function findAccountByEmail(email) {
-  const admin = await prisma.admin.findUnique({ where: { email } })
+  const admin = await prisma.admin.findFirst({
+    where: { email: emailWhereInsensitive(email) },
+    orderBy: { id: "asc" },
+  })
   if (admin) return { type: "admin", record: admin }
 
-  const nucleo = await prisma.nucleo.findUnique({ where: { Email: email } })
+  const nucleo = await prisma.nucleo.findFirst({
+    where: { Email: emailWhereInsensitive(email) },
+    orderBy: { id: "asc" },
+  })
   if (nucleo) return { type: "nucleo", record: nucleo }
 
   return null
@@ -53,7 +60,7 @@ function getName(type, record) {
  */
 const requestReset = async (req, res) => {
   try {
-    const email = (req.body?.email || "").trim().toLowerCase()
+    const email = normalizeEmail(req.body?.email || "")
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!email || !emailRegex.test(email)) {

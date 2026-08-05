@@ -1,6 +1,7 @@
 const bcrypt = require("bcrypt")
 const prisma = require("../lib/prismaClient")
 const { generateTokens, refreshAccessToken } = require("../middlewares/authFunctions")
+const { normalizeEmail, emailWhereInsensitive } = require("../lib/email")
 const { GetAllNucleos, GetNucleoById, CreateNucleo } = require("./NucleosControllers")
 
 const logAdminAction = async (adminId, action, details = {}) => {
@@ -51,7 +52,8 @@ const updateToken = async (req, res) => {
 
 const create = async (req, res) => {
   try {
-    const { email, password, name, role = "admin" } = req.body
+    const { email: emailRaw, password, name, role = "admin" } = req.body
+    const email = normalizeEmail(emailRaw)
 
     const validationErrors = validateInput(req.body, ["email", "password"])
     if (validationErrors.length > 0) {
@@ -67,7 +69,7 @@ const create = async (req, res) => {
       return res.status(400).json({ success: false, message: "A senha deve ter pelo menos 8 caracteres" })
     }
 
-    const existing = await prisma.admin.findUnique({ where: { email } })
+    const existing = await prisma.admin.findFirst({ where: { email: emailWhereInsensitive(email) } })
     if (existing) {
       return res.status(409).json({ success: false, message: "Email já está em uso." })
     }
@@ -88,14 +90,19 @@ const create = async (req, res) => {
 
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body
+    const { email: emailRaw, password } = req.body
+    const email = normalizeEmail(emailRaw)
 
     const validationErrors = validateInput(req.body, ["email", "password"])
     if (validationErrors.length > 0) {
       return res.status(400).json({ success: false, message: "Email e senha são obrigatórios." })
     }
 
-    const admin = await prisma.admin.findFirst({ where: { email, status: "active" } })
+    // Case-insensitive: contas antigas com capitalização variada seguem entrando.
+    const admin = await prisma.admin.findFirst({
+      where: { email: emailWhereInsensitive(email), status: "active" },
+      orderBy: { id: "asc" },
+    })
 
     if (!admin) {
       await logAdminAction(null, "LOGIN_FAILED", { email, reason: "user_not_found" })
