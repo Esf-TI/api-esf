@@ -6,6 +6,8 @@ const multer = require("multer")
 const uploadProjects = require("../middlewares/uploadsProjects")
 const uploadImage = require("../middlewares/storageUpload")
 const { publicCache } = require("../middlewares/cacheControl")
+const { authenticateAdminOrNucleo, ensureProjetoDoNucleo } = require("../middlewares/authFunctions")
+const { permitirPrimeiroProjetoOuAutenticar } = require("../middlewares/primeiroProjeto")
 const supabase = require("../lib/supabaseClient")
 const { optimizeImage } = require("../lib/imageOptimizer")
 
@@ -35,7 +37,7 @@ const singleImagem = multer({
 }).single("imagem")
 
 // UPLOAD DE IMAGEM AVULSA (retorna URL pública no bucket projetos)
-router.post("/upload-imagem", singleImagem, async (req, res) => {
+router.post("/upload-imagem", authenticateAdminOrNucleo, singleImagem, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Nenhuma imagem enviada" })
   const image = req.file
   let buffer = image.buffer
@@ -65,10 +67,11 @@ router.post("/upload-imagem", singleImagem, async (req, res) => {
 })
 
 // CRIAR PROJETO com upload de fotos (capa + extras via Supabase Storage)
-router.post("/projetos", multiUpload, uploadProjects, ProjetcsControllers.createProject)
+// multiUpload primeiro: o guard precisa ler NucleoResponsavel do FormData.
+router.post("/projetos", multiUpload, permitirPrimeiroProjetoOuAutenticar, uploadProjects, ProjetcsControllers.createProject)
 
 // CRIAR PROJETO sem upload (dados já têm URL)
-router.post("/projetos1", ProjetcsControllers.createProjectDentro)
+router.post("/projetos1", permitirPrimeiroProjetoOuAutenticar, ProjetcsControllers.createProjectDentro)
 
 // RETORNAR TODOS OS PROJETOS
 router.get("/projetos", publicCache(60), ProjetcsControllers.returnProjects)
@@ -80,18 +83,18 @@ router.get("/projetos/nucleos/:nucleoId", publicCache(60), ProjetcsControllers.r
 router.get("/projetos/:id", publicCache(60), ProjetcsControllers.returnProjectById)
 
 // ALTERAR TODOS OS CAMPOS (com fotos via Supabase Storage)
-router.put("/projetos/:id", multiUpload, uploadProjects, ProjetcsControllers.editProjectById)
+router.put("/projetos/:id", authenticateAdminOrNucleo, ensureProjetoDoNucleo, multiUpload, uploadProjects, ProjetcsControllers.editProjectById)
 
 // ALTERAR TODOS OS CAMPOS sem upload
-router.put("/projetosAlterar/:id", ProjetcsControllers.editProjectByIdWithout)
+router.put("/projetosAlterar/:id", authenticateAdminOrNucleo, ensureProjetoDoNucleo, ProjetcsControllers.editProjectByIdWithout)
 
 // ALTERAR SÓ UM CAMPO ESPECÍFICO (sem arquivo)
-router.patch("/projetosedit/:id", ProjetcsControllers.patchProject)
+router.patch("/projetosedit/:id", authenticateAdminOrNucleo, ensureProjetoDoNucleo, ProjetcsControllers.patchProject)
 
 // ATUALIZAR FOTO DE CAPA via Supabase Storage (bucket: projetos)
-router.patch("/projetoPhoto/:id", singleUpload, (req, _res, next) => { req.uploadBucket = "projetos"; next() }, uploadImage, ProjetcsControllers.updatePhotoCapaProjeto)
+router.patch("/projetoPhoto/:id", authenticateAdminOrNucleo, ensureProjetoDoNucleo, singleUpload, (req, _res, next) => { req.uploadBucket = "projetos"; next() }, uploadImage, ProjetcsControllers.updatePhotoCapaProjeto)
 
 // APAGAR O PROJETO
-router.delete("/projetos/:id", ProjetcsControllers.deleteProjectById)
+router.delete("/projetos/:id", authenticateAdminOrNucleo, ensureProjetoDoNucleo, ProjetcsControllers.deleteProjectById)
 
 module.exports = router

@@ -2,6 +2,7 @@ const express = require("express")
 const router = express.Router()
 const AnaisController = require("../controllers/AnaisController")
 const { publicCache } = require("../middlewares/cacheControl")
+const { authenticateAdmin } = require("../middlewares/authFunctions")
 const { body } = require("express-validator")
 
 // Validações para criação de anais
@@ -19,9 +20,9 @@ router.get("/", AnaisController.index) // Admin: todas as publicações
 router.get("/stats", publicCache(120), AnaisController.stats)
 router.get("/:id", publicCache(60), AnaisController.show)
 
-// Rotas administrativas (adicionar middleware de autenticação aqui)
-router.post("/", createValidation, AnaisController.store)
-router.put("/:id", AnaisController.update)
-router.delete("/:id", AnaisController.destroy)
+// Rotas administrativas — exigem admin autenticado.
+router.post("/", authenticateAdmin, createValidation, AnaisController.store)
+router.put("/:id", authenticateAdmin, AnaisController.update)
+router.delete("/:id", authenticateAdmin, AnaisController.destroy)
 
 module.exports = router

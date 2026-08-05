@@ -362,7 +362,9 @@ const patchNucleo = async (req, res) => {
     return res.status(400).send("O ID do núcleo, o campo a ser alterado e o novo valor são obrigatórios")
   }
 
-  const allowedFields = ["Nome", "Email", "Cidade", "Estado", "Descricao", "DataFundacao", "fotoCapa", "foto1", "foto2", "foto3", "linkDoacao", "linkSite", "linkLinkedin", "linkFacebook", "linkInstagram", "status"]
+  // `status` NÃO entra aqui: moderação é exclusiva do admin (PATCH /nucleos/status/:id).
+  // Com ele na lista, um núcleo conseguia se auto-aprovar ou reprovar outro.
+  const allowedFields = ["Nome", "Email", "Cidade", "Estado", "Descricao", "DataFundacao", "fotoCapa", "foto1", "foto2", "foto3", "linkDoacao", "linkSite", "linkLinkedin", "linkFacebook", "linkInstagram"]
   if (!allowedFields.includes(campoAAlterar)) {
     return res.status(400).send("Campo não permitido para atualização")
   }

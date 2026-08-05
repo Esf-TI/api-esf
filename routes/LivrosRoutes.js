@@ -2,6 +2,7 @@ const express = require("express")
 const router = express.Router()
 const LivrosController = require("../controllers/LivrosController")
 const { publicCache } = require("../middlewares/cacheControl")
+const { authenticateAdmin } = require("../middlewares/authFunctions")
 const { body } = require("express-validator")
 
 const createValidation = [
@@ -15,10 +16,10 @@ router.get("/published", publicCache(60), LivrosController.indexPublished)
 router.get("/stats", publicCache(120), LivrosController.stats)
 router.get("/:id", publicCache(60), LivrosController.show)
 
-// Rotas administrativas
-router.get("/", LivrosController.index)
-router.post("/", createValidation, LivrosController.store)
-router.put("/:id", LivrosController.update)
-router.delete("/:id", LivrosController.destroy)
+// Rotas administrativas — exigem admin autenticado.
+router.get("/", authenticateAdmin, LivrosController.index)
+router.post("/", authenticateAdmin, createValidation, LivrosController.store)
+router.put("/:id", authenticateAdmin, LivrosController.update)
+router.delete("/:id", authenticateAdmin, LivrosController.destroy)
 
 module.exports = router
