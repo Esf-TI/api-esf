@@ -13,6 +13,7 @@ const {
 } = require("../lib/nucleoSlug")
 const { getPagination } = require("../lib/pagination")
 const { normalizeEmail, emailWhereInsensitive } = require("../lib/email")
+const { parseDataLocal, isDataFutura } = require("../lib/dates")
 require("dotenv").config()
 
 /** Piso para displayTotal quando há poucos cadastros aprovados (alinhado ao `DEFAULT_NUCLEOS_EXIBICAO_PISO` no front). */
@@ -85,6 +86,16 @@ const CreateNucleo = async (req, res) => {
       return res.status(400).json({ success: false, message: "Imagem é obrigatória" })
     }
 
+    // Valida a data antes de chegar no Prisma: um valor tipo "31/12/2020" virava
+    // Invalid Date e estourava 500 genérico no cadastro.
+    const dataFundacaoParsed = parseDataLocal(dataFundacao)
+    if (!dataFundacaoParsed) {
+      return res.status(400).json({ success: false, message: "Data de fundação inválida" })
+    }
+    if (isDataFutura(dataFundacaoParsed)) {
+      return res.status(400).json({ success: false, message: "Data de fundação não pode ser no futuro" })
+    }
+
     // Duplicidade ignorando caixa: evita "A@x.com" e "a@x.com" coexistirem.
     const existing = await prisma.nucleo.findFirst({ where: { Email: emailWhereInsensitive(email) } })
     if (existing) {
@@ -104,7 +115,7 @@ const CreateNucleo = async (req, res) => {
         Cidade: cidade,
         Estado: estado,
         Descricao: descricao,
-        DataFundacao: new Date(dataFundacao),
+        DataFundacao: dataFundacaoParsed,
         fotoCapa: upload.publicUrl,
         linkDoacao: linkDoacao || null,
         linkSite: linkSite || null,
@@ -121,6 +132,9 @@ const CreateNucleo = async (req, res) => {
 
     res.status(201).json({ success: true, message: "Núcleo criado com sucesso!", data: { id: nucleo.id, nome: nucleo.Nome, status: "pending" } })
   } catch (error) {
+    if (error.code === "P2002") {
+      return res.status(409).json({ success: false, message: "E-mail já cadastrado" })
+    }
     console.error("Error creating nucleo:", error)
     res.status(500).json({ success: false, message: "Erro interno do servidor" })
   }
@@ -149,10 +163,13 @@ const CreateNucleoByAdmin = async (req, res) => {
       return res.status(400).json({ success: false, message: "A senha deve ter pelo menos 8 caracteres" })
     }
 
+    let dataFundacaoParsed = null
     if (dataFundacao) {
-      const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
-      const dataDate = new Date(dataFundacao); dataDate.setHours(0, 0, 0, 0)
-      if (dataDate > hoje) {
+      dataFundacaoParsed = parseDataLocal(dataFundacao)
+      if (!dataFundacaoParsed) {
+        return res.status(400).json({ success: false, message: "Data de fundação inválida" })
+      }
+      if (isDataFutura(dataFundacaoParsed)) {
         return res.status(400).json({ success: false, message: "Data de fundação não pode ser no futuro" })
       }
     }
@@ -172,7 +189,7 @@ const CreateNucleoByAdmin = async (req, res) => {
         Cidade: cidade,
         Estado: estado,
         Descricao: descricao || `Núcleo ${nomeNucleo} criado pelo administrador`,
-        DataFundacao: dataFundacao ? new Date(dataFundacao) : new Date(),
+        DataFundacao: dataFundacaoParsed || new Date(),
         fotoCapa: null,
         linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram,
         status: "approved",
@@ -182,6 +199,9 @@ const CreateNucleoByAdmin = async (req, res) => {
 
     res.status(201).json({ success: true, message: "Núcleo criado com sucesso pelo administrador!", data: { id: nucleo.id, nome: nucleo.Nome, email, cidade, status: "approved" } })
   } catch (error) {
+    if (error.code === "P2002") {
+      return res.status(409).json({ success: false, message: "Email já está em uso" })
+    }
     console.error("Error creating nucleo by admin:", error)
     res.status(500).json({ success: false, message: "Erro interno do servidor" })
   }
@@ -341,9 +361,15 @@ const updateNucleoStatus = async (req, res) => {
   }
 
   try {
+    // Registra quem moderou e quando (campos existiam no schema mas ninguém gravava).
     const nucleo = await prisma.nucleo.update({
       where: { id: nucleoId },
-      data: { status: statusNormalizado },
+      data: {
+        status: statusNormalizado,
+        rejection_reason: statusNormalizado === "rejected" ? req.body.motivo || req.body.reason || null : null,
+        approved_by: statusNormalizado === "approved" ? req.admin?.id ?? null : null,
+        approved_at: statusNormalizado === "approved" ? new Date() : null,
+      },
     })
 
     res.json({ success: true, message: `Núcleo ${nucleo.Nome} ${statusNormalizado === "approved" ? "aprovado" : "reprovado"} com sucesso`, data: { nucleoId, nucleoNome: nucleo.Nome, status: statusNormalizado } })
@@ -358,7 +384,9 @@ const patchNucleo = async (req, res) => {
   const nucleoId = Number(req.params.id)
   const { campoAAlterar, novoValor } = req.body
 
-  if (!nucleoId || !campoAAlterar || !novoValor) {
+  // `novoValor` só não pode ser undefined/null: com `!novoValor` era impossível
+  // limpar um link já preenchido (ex.: apagar o Instagram devolvia 400).
+  if (!nucleoId || !campoAAlterar || novoValor === undefined || novoValor === null) {
     return res.status(400).send("O ID do núcleo, o campo a ser alterado e o novo valor são obrigatórios")
   }
 
@@ -375,6 +403,8 @@ const patchNucleo = async (req, res) => {
     res.status(200).send(`Campo ${campoAAlterar} do núcleo ${nucleoId} atualizado com sucesso!`)
   } catch (error) {
     if (error.code === "P2025") return res.status(404).send("Núcleo não encontrado")
+    // P2002 = violação de @unique (Email/subdominio): mensagem clara em vez de 500.
+    if (error.code === "P2002") return res.status(409).send("Este e-mail já está cadastrado em outro núcleo")
     console.error("Erro ao atualizar campo do núcleo:", error)
     res.status(500).send("Erro ao atualizar campo do núcleo")
   }
@@ -487,12 +517,15 @@ const putNucleoWithoutFile = async (req, res) => {
         ...(Email && { Email: normalizeEmail(Email) }),
         ...(Cidade && { Cidade }),
         ...(Estado && { Estado }),
-        ...(Descricao && { Descricao }),
-        ...(DataFundacao && { DataFundacao: new Date(DataFundacao) }),
-        ...(fotoCapa && { fotoCapa }),
-        ...(foto1 && { foto1 }),
-        ...(foto2 && { foto2 }),
-        ...(foto3 && { foto3 }),
+        // `!== undefined` (e não truthy): assim dá para LIMPAR um campo enviando
+        // string vazia. Com a guarda antiga, remover uma foto da galeria dizia
+        // "salvo com sucesso" mas a imagem continuava lá depois de recarregar.
+        ...(Descricao !== undefined && { Descricao }),
+        ...(DataFundacao && { DataFundacao: parseDataLocal(DataFundacao) || undefined }),
+        ...(fotoCapa !== undefined && { fotoCapa: fotoCapa || null }),
+        ...(foto1 !== undefined && { foto1: foto1 || null }),
+        ...(foto2 !== undefined && { foto2: foto2 || null }),
+        ...(foto3 !== undefined && { foto3: foto3 || null }),
         ...(linkDoacao !== undefined && { linkDoacao }),
         ...(linkSite !== undefined && { linkSite }),
         ...(linkLinkedin !== undefined && { linkLinkedin }),
@@ -507,6 +540,7 @@ const putNucleoWithoutFile = async (req, res) => {
     res.status(200).json({ success: true, message: "Núcleo atualizado com sucesso", data: { nucleoId } })
   } catch (error) {
     if (error.code === "P2025") return res.status(404).json({ success: false, message: "Núcleo não encontrado" })
+    if (error.code === "P2002") return res.status(409).json({ success: false, message: "Este e-mail já está cadastrado em outro núcleo" })
     console.error("Erro ao atualizar núcleo:", error)
     res.status(500).json({ success: false, message: "Erro ao atualizar núcleo" })
   }

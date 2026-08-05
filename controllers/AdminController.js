@@ -83,6 +83,9 @@ const create = async (req, res) => {
 
     res.status(201).json({ success: true, message: "Administrador criado com sucesso.", data: { id: admin.id, email, name, role } })
   } catch (error) {
+    if (error.code === "P2002") {
+      return res.status(409).json({ success: false, message: "Email já está em uso." })
+    }
     console.error("Error creating admin:", error)
     res.status(500).json({ success: false, message: "Erro interno do servidor" })
   }
@@ -117,7 +120,9 @@ const login = async (req, res) => {
 
     const { accessToken, refreshToken, accessTokenExpires, refreshTokenExpires } = generateTokens(admin.id, "admin")
 
-    await prisma.admin.update({ where: { id: admin.id }, data: { updated_at: new Date() } })
+    // Registra o último acesso (o campo existia e nunca era preenchido;
+    // `updated_at` já é @updatedAt, então gravá-lo à mão era redundante).
+    await prisma.admin.update({ where: { id: admin.id }, data: { last_login: new Date() } })
 
     const existingToken = await prisma.adminToken.findFirst({ where: { adminId: admin.id } })
     if (existingToken) {
@@ -179,13 +184,18 @@ const getActivityLogs = async (req, res) => {
 
     const where = action ? { action } : {}
 
-    const logs = await prisma.adminLog.findMany({
-      where,
-      orderBy: { timestamp: "desc" },
-      skip: Number(skip),
-      take: Number(limit),
-      include: { admin: { select: { email: true, nome: true } } },
-    })
+    // `total` precisa ser o count da tabela; antes usava formatted.length (o
+    // tamanho da página), então totalPages dava 1 e nunca havia página 2.
+    const [logs, total] = await Promise.all([
+      prisma.adminLog.findMany({
+        where,
+        orderBy: { timestamp: "desc" },
+        skip: Number(skip),
+        take: Number(limit),
+        include: { admin: { select: { email: true, nome: true } } },
+      }),
+      prisma.adminLog.count({ where }),
+    ])
 
     const formatted = logs.map((l) => ({
       ...l,
@@ -193,7 +203,18 @@ const getActivityLogs = async (req, res) => {
       adminName: l.admin?.nome ?? null,
     }))
 
-    res.json({ success: true, data: { logs: formatted, pagination: { page: Number(page), limit: Number(limit), total: formatted.length } } })
+    res.json({
+      success: true,
+      data: {
+        logs: formatted,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          totalPages: Math.max(1, Math.ceil(total / Number(limit))),
+        },
+      },
+    })
   } catch (error) {
     console.error("Error in getActivityLogs:", error)
     res.status(500).json({ success: false, message: "Erro interno do servidor" })
@@ -211,9 +232,17 @@ const updateNucleoStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: "Status inválido. Use: pending, approved, rejected" })
     }
 
+    // Persiste a moderação: `rejection_reason`, `approved_by` e `approved_at`
+    // existiam no schema e eram devolvidos ao painel, mas nada os gravava — a
+    // justificativa escrita pelo admin se perdia (o campo ficava sempre null).
     const nucleo = await prisma.nucleo.update({
       where: { id: nucleoId },
-      data: { status },
+      data: {
+        status,
+        rejection_reason: status === "rejected" ? reason || null : null,
+        approved_by: status === "approved" ? adminId : null,
+        approved_at: status === "approved" ? new Date() : null,
+      },
     })
 
     await logAdminAction(adminId, "NUCLEO_STATUS_UPDATED", { nucleoId, newStatus: status, reason: reason || "No reason provided" })
