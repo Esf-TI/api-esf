@@ -1,10 +1,12 @@
 const prisma = require("../lib/prismaClient")
+const { parseDataLocal, isDataFutura } = require("../lib/dates")
 
 const createProject = async (req, res) => {
   const { Nome, NucleoResponsavel, Area, descricao, PessoasImpactadas, DataFundacao, Cidade } = req.body
   const uploads = req.files
 
-  if (!Nome || !descricao || !NucleoResponsavel || !PessoasImpactadas || !DataFundacao || !Cidade) {
+  // PessoasImpactadas usa checagem explícita: `!PessoasImpactadas` barrava o valor 0.
+  if (!Nome || !descricao || !NucleoResponsavel || PessoasImpactadas === undefined || PessoasImpactadas === null || PessoasImpactadas === "" || !DataFundacao || !Cidade) {
     return res.status(400).send("Todos os campos são obrigatórios")
   }
 
@@ -12,9 +14,9 @@ const createProject = async (req, res) => {
     return res.status(400).send("ID do núcleo responsável é inválido")
   }
 
-  const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
-  const dataDate = new Date(DataFundacao); dataDate.setHours(0, 0, 0, 0)
-  if (dataDate > hoje) return res.status(400).send("Data de fundação não pode ser no futuro")
+  const dataFundacao = parseDataLocal(DataFundacao)
+  if (!dataFundacao) return res.status(400).send("Data de fundação inválida")
+  if (isDataFutura(dataFundacao)) return res.status(400).send("Data de fundação não pode ser no futuro")
 
   try {
     const nucleo = await prisma.nucleo.findUnique({ where: { id: Number(NucleoResponsavel) } })
@@ -22,6 +24,9 @@ const createProject = async (req, res) => {
 
     // uploads.fotoCapa já é o objeto { filename, publicUrl } após uploadsProjects middleware
     const fotoCapa = uploads?.fotoCapa?.publicUrl ?? null
+    // As fotos extras já foram enviadas ao storage pelo middleware; sem isto elas
+    // eram pagas em storage e descartadas (só o edit as gravava).
+    const fotosUrls = (uploads?.foto || []).map((f) => f.publicUrl)
 
     await prisma.projeto.create({
       data: {
@@ -30,9 +35,14 @@ const createProject = async (req, res) => {
         Descricao: descricao,
         Area: Area || null,
         PessoasImpactadas: Number(PessoasImpactadas),
-        DataFundacao: new Date(DataFundacao),
+        DataFundacao: dataFundacao,
         Cidade,
         fotoCapa,
+        foto1: fotosUrls[0] ?? null,
+        foto2: fotosUrls[1] ?? null,
+        foto3: fotosUrls[2] ?? null,
+        foto4: fotosUrls[3] ?? null,
+        foto5: fotosUrls[4] ?? null,
       },
     })
 
@@ -64,6 +74,9 @@ const createProjectDentro = async (req, res) => {
     return res.status(400).send("ID do núcleo responsável é inválido")
   }
 
+  const dataInicioParsed = parseDataLocal(DataInicio)
+  if (!dataInicioParsed) return res.status(400).send("Data de início inválida")
+
   try {
     const nucleo = await prisma.nucleo.findUnique({ where: { id: Number(NucleoResponsavel) } })
     if (!nucleo) return res.status(400).send("Núcleo responsável não encontrado")
@@ -75,7 +88,7 @@ const createProjectDentro = async (req, res) => {
         Descricao,
         Area: Area || null,
         PessoasImpactadas: Number(PessoasImpactadas),
-        DataFundacao: new Date(DataInicio),
+        DataFundacao: dataInicioParsed,
         Cidade,
         fotoCapa,
         foto1: foto1 || null,
@@ -156,9 +169,12 @@ const editProjectById = async (req, res) => {
   const { Nome, NucleoResponsavel, Area, descricao, PessoasImpactadas, DataFundacao, Cidade } = req.body
   const uploads = req.files
 
-  if (!projectId || !Nome || !descricao || !NucleoResponsavel || !PessoasImpactadas || !DataFundacao || !Cidade) {
+  if (!projectId || !Nome || !descricao || !NucleoResponsavel || PessoasImpactadas === undefined || PessoasImpactadas === null || PessoasImpactadas === "" || !DataFundacao || !Cidade) {
     return res.status(400).send("Todos os campos são obrigatórios")
   }
+
+  const dataFundacaoDate = parseDataLocal(DataFundacao)
+  if (!dataFundacaoDate) return res.status(400).send("Data de fundação inválida")
 
   try {
     const existing = await prisma.projeto.findUnique({ where: { id: projectId } })
@@ -176,7 +192,7 @@ const editProjectById = async (req, res) => {
         Descricao: descricao,
         Area: Area || null,
         PessoasImpactadas: Number(PessoasImpactadas),
-        DataFundacao: new Date(DataFundacao),
+        DataFundacao: dataFundacaoDate,
         Cidade,
         fotoCapa,
         // Preservar fotos existentes se não foram enviadas novas
@@ -228,14 +244,19 @@ const editProjectByIdWithout = async (req, res) => {
   if (!dataFundacaoVal) return res.status(400).send("Data de fundação é obrigatória")
   if (!Cidade) return res.status(400).send("Cidade é obrigatória")
 
-  const dataFundacaoDate = new Date(dataFundacaoVal)
-  if (Number.isNaN(dataFundacaoDate.getTime())) {
+  const dataFundacaoDate = parseDataLocal(dataFundacaoVal)
+  if (!dataFundacaoDate) {
     return res.status(400).send("Data de fundação inválida")
   }
 
   try {
     const existing = await prisma.projeto.findUnique({ where: { id: projectId } })
     if (!existing) return res.status(404).send("Projeto não encontrado")
+
+    // Só sobrescreve a foto quando o campo VEM no corpo. Antes, `foto || null`
+    // apagava todas as imagens sempre que o formulário salvava sem reenviá-las
+    // (ex.: editar apenas o nome do projeto zerava a galeria).
+    const manterFoto = (novo, atual) => (novo !== undefined ? novo || null : atual)
 
     const updated = await prisma.projeto.update({
       where: { id: projectId },
@@ -247,12 +268,12 @@ const editProjectByIdWithout = async (req, res) => {
         PessoasImpactadas: Number(PessoasImpactadas),
         DataFundacao: dataFundacaoDate,
         Cidade,
-        fotoCapa: fotoCapa || null,
-        foto1: foto1 || null,
-        foto2: foto2 || null,
-        foto3: foto3 || null,
-        foto4: foto4 || null,
-        foto5: foto5 || null,
+        fotoCapa: manterFoto(fotoCapa, existing.fotoCapa),
+        foto1: manterFoto(foto1, existing.foto1),
+        foto2: manterFoto(foto2, existing.foto2),
+        foto3: manterFoto(foto3, existing.foto3),
+        foto4: manterFoto(foto4, existing.foto4),
+        foto5: manterFoto(foto5, existing.foto5),
       },
     })
 
@@ -267,7 +288,9 @@ const patchProject = async (req, res) => {
   const projectId = Number(req.params.id)
   const { campoAAlterar, novoValor } = req.body
 
-  if (!projectId || !campoAAlterar || !novoValor) {
+  // `novoValor` só não pode ser undefined/null: com `!novoValor` era impossível
+  // limpar um campo (string vazia) ou gravar PessoasImpactadas = 0.
+  if (!projectId || !campoAAlterar || novoValor === undefined || novoValor === null) {
     return res.status(400).send("O ID do projeto, o campo a ser alterado e o novo valor são obrigatórios")
   }
 
@@ -280,7 +303,13 @@ const patchProject = async (req, res) => {
     const existing = await prisma.projeto.findUnique({ where: { id: projectId } })
     if (!existing) return res.status(404).send("Projeto não encontrado")
 
-    await prisma.projeto.update({ where: { id: projectId }, data: { [campoAAlterar]: novoValor } })
+    // Campo numérico chega como string no corpo; converte para o Prisma aceitar.
+    const valorFinal = campoAAlterar === "PessoasImpactadas" ? Number(novoValor) : novoValor
+    if (campoAAlterar === "PessoasImpactadas" && !Number.isFinite(valorFinal)) {
+      return res.status(400).send("PessoasImpactadas deve ser um número")
+    }
+
+    await prisma.projeto.update({ where: { id: projectId }, data: { [campoAAlterar]: valorFinal } })
     res.status(200).send(`Campo ${campoAAlterar} do projeto ${projectId} atualizado com sucesso!`)
   } catch (error) {
     console.error("Erro ao atualizar campo do projeto:", error)

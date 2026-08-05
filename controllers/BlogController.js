@@ -47,23 +47,32 @@ const CreateBlog = async (req, res) => {
     }
 
     const image = upload.publicUrl
-    const baseSlug = buildSlug(title)
+    // Título só com caracteres não-ASCII gera slug vazio: usa "post" como base.
+    const baseSlug = buildSlug(title) || "post"
     const existing = await prisma.blog.findUnique({ where: { slug: baseSlug } })
-    const finalSlug = existing ? `${baseSlug}-${Date.now()}` : baseSlug
+    let finalSlug = existing ? `${baseSlug}-${Date.now()}` : baseSlug
 
-    const post = await prisma.blog.create({
-      data: {
-        title,
-        description,
-        content,
-        image,
-        author_id: adminId,
-        tags: tags && tags.trim() !== "" ? tags : null,
-        status: finalStatus,
-        slug: finalSlug,
-        published_at: finalStatus === "published" ? new Date() : null,
-      },
-    })
+    const dadosPost = {
+      title,
+      description,
+      content,
+      image,
+      author_id: adminId,
+      tags: tags && tags.trim() !== "" ? tags : null,
+      status: finalStatus,
+      published_at: finalStatus === "published" ? new Date() : null,
+    }
+
+    let post
+    try {
+      post = await prisma.blog.create({ data: { ...dadosPost, slug: finalSlug } })
+    } catch (error) {
+      // Corrida entre o check e o create (slug é @unique): em vez de estourar 500,
+      // desambigua e tenta de novo.
+      if (error.code !== "P2002") throw error
+      finalSlug = `${baseSlug}-${Date.now()}`
+      post = await prisma.blog.create({ data: { ...dadosPost, slug: finalSlug } })
+    }
 
     if (adminId) await logAdminAction(adminId, "BLOG_POST_CREATED", { postId: post.id, title, slug: finalSlug, status: finalStatus })
 
@@ -165,7 +174,16 @@ const updateBlog = async (req, res) => {
     if (tags !== undefined) updateData.tags = tags && tags.trim() !== "" ? tags : null
     if (status) {
       updateData.status = status
-      if (status === "published") updateData.published_at = new Date()
+      if (status === "published") {
+        // Só carimba a data na PRIMEIRA publicação. Antes, qualquer edição de um
+        // post já publicado (o formulário reenvia status "published") jogava a
+        // data para hoje e reordenava a listagem do blog.
+        const atual = await prisma.blog.findUnique({
+          where: { id: Number(id) },
+          select: { published_at: true },
+        })
+        if (!atual?.published_at) updateData.published_at = new Date()
+      }
     }
     if (upload?.publicUrl) updateData.image = upload.publicUrl
 

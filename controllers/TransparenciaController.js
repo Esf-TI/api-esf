@@ -68,31 +68,36 @@ const TransparenciaController = {
         return res.status(400).json({ success: false, message: "Pelo menos um arquivo é obrigatório" })
       }
 
-      const documentosCriados = []
-
+      // Sobe todos os arquivos primeiro e só então grava os registros numa única
+      // transação: antes, uma falha no meio do laço deixava documentos parciais
+      // salvos enquanto o admin recebia erro e reenviava tudo (duplicando).
+      const enviados = []
       for (const file of arquivos) {
         const nomeArquivo = fixFileName(file.originalname)
-        const { objectPath, publicUrl } = await uploadPublicBuffer({
+        const { publicUrl } = await uploadPublicBuffer({
           bucket: BUCKET,
           folder: categoria.toLowerCase().replace(/\s+/g, "-"),
           file,
         })
-
-        const documento = await prisma.documentoTransparencia.create({
-          data: {
-            // Mantém o título do grupo; o nome do arquivo fica em arquivo_nome.
-            titulo,
-            descricao: descricao || null,
-            categoria,
-            arquivo_url: publicUrl,
-            arquivo_nome: nomeArquivo,
-            arquivo_tamanho: file.size,
-            created_by: req.admin?.id || null,
-          },
-        })
-
-        documentosCriados.push(documento)
+        enviados.push({ nomeArquivo, publicUrl, tamanho: file.size })
       }
+
+      const documentosCriados = await prisma.$transaction(
+        enviados.map((item) =>
+          prisma.documentoTransparencia.create({
+            data: {
+              // Mantém o título do grupo; o nome do arquivo fica em arquivo_nome.
+              titulo,
+              descricao: descricao || null,
+              categoria,
+              arquivo_url: item.publicUrl,
+              arquivo_nome: item.nomeArquivo,
+              arquivo_tamanho: item.tamanho,
+              created_by: req.admin?.id || null,
+            },
+          })
+        )
+      )
 
       res.status(201).json({
         success: true,

@@ -107,7 +107,7 @@ class LivrosController {
         return res.status(400).json({ success: false, message: "Erro de validação", errors: errors.array() })
       }
 
-      const { titulo, autores, editora, ano, edicao, isbn, capa_url, pdf_url, link_compra, descricao, status = "active" } = req.body
+      const { titulo, autores, editora, ano, edicao, isbn, capa_url, pdf_url, link_compra, descricao, featured, status = "active" } = req.body
 
       if (!titulo || !ano) {
         return res.status(400).json({ success: false, message: "Campos obrigatórios: titulo, ano" })
@@ -136,6 +136,9 @@ class LivrosController {
           capa_url: capa_url || null,
           pdf_url: pdf_url || null,
           link_compra: link_compra || null,
+          // `featured` era ignorado na criação: marcar "destaque" no modal não
+          // tinha efeito (só passava a valer se o admin reabrisse e editasse).
+          featured: Boolean(featured),
           status: finalStatus,
         },
       })
