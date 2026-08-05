@@ -12,6 +12,7 @@ const {
   NUCLEO_ADMIN_SELECT,
 } = require("../lib/nucleoSlug")
 const { getPagination } = require("../lib/pagination")
+const { normalizeEmail, emailWhereInsensitive } = require("../lib/email")
 require("dotenv").config()
 
 /** Piso para displayTotal quando há poucos cadastros aprovados (alinhado ao `DEFAULT_NUCLEOS_EXIBICAO_PISO` no front). */
@@ -68,8 +69,11 @@ const deleteNucleo = async (req, res) => {
 
 const CreateNucleo = async (req, res) => {
   try {
-    const { email, senha, nomeNucleo, descricao, cidade, estado, dataFundacao, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram } =
+    const { email: emailRaw, senha, nomeNucleo, descricao, cidade, estado, dataFundacao, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram } =
       req.body
+
+    // Guarda sempre normalizado: o login compara ignorando caixa.
+    const email = normalizeEmail(emailRaw)
 
     const validationErrors = validateNucleoData({ email, senha, nomeNucleo, descricao, cidade, estado, dataFundacao })
     if (validationErrors.length > 0) {
@@ -81,7 +85,8 @@ const CreateNucleo = async (req, res) => {
       return res.status(400).json({ success: false, message: "Imagem é obrigatória" })
     }
 
-    const existing = await prisma.nucleo.findUnique({ where: { Email: email } })
+    // Duplicidade ignorando caixa: evita "A@x.com" e "a@x.com" coexistirem.
+    const existing = await prisma.nucleo.findFirst({ where: { Email: emailWhereInsensitive(email) } })
     if (existing) {
       return res.status(409).json({ success: false, message: "E-mail já cadastrado" })
     }
@@ -123,7 +128,11 @@ const CreateNucleo = async (req, res) => {
 
 const CreateNucleoByAdmin = async (req, res) => {
   try {
-    const { email, senha, nomeNucleo, descricao, cidade, estado = "", dataFundacao, linkDoacao = "", linkSite = "", linkLinkedin = "", linkFacebook = "", linkInstagram = "" } = req.body
+    const { email: emailRaw, senha, nomeNucleo, descricao, cidade, estado = "", dataFundacao, linkDoacao = "", linkSite = "", linkLinkedin = "", linkFacebook = "", linkInstagram = "" } = req.body
+
+    // Normaliza: o admin costuma digitar/copiar o e-mail com capitalização
+    // variada, e o núcleo depois tenta entrar digitando tudo minúsculo.
+    const email = normalizeEmail(emailRaw)
 
     const requiredFields = ["email", "senha", "nomeNucleo", "cidade"]
     const missingFields = requiredFields.filter((field) => !req.body[field] || req.body[field].toString().trim() === "")
@@ -148,7 +157,7 @@ const CreateNucleoByAdmin = async (req, res) => {
       }
     }
 
-    const existing = await prisma.nucleo.findUnique({ where: { Email: email } })
+    const existing = await prisma.nucleo.findFirst({ where: { Email: emailWhereInsensitive(email) } })
     if (existing) {
       return res.status(409).json({ success: false, message: "Email já está em uso" })
     }
@@ -186,7 +195,13 @@ const LoginNucleo = async (req, res) => {
   }
 
   try {
-    const nucleo = await prisma.nucleo.findUnique({ where: { Email: email } })
+    // Busca ignorando maiúsculas/minúsculas e espaços: contas antigas gravadas
+    // com capitalização variada (ex.: criadas pelo painel admin) continuam
+    // entrando sem precisar de migração de dados.
+    const nucleo = await prisma.nucleo.findFirst({
+      where: { Email: emailWhereInsensitive(email) },
+      orderBy: { id: "asc" },
+    })
 
     if (!nucleo) {
       return res.status(404).send("Usuário não encontrado")
@@ -353,7 +368,8 @@ const patchNucleo = async (req, res) => {
   }
 
   try {
-    await prisma.nucleo.update({ where: { id: nucleoId }, data: { [campoAAlterar]: novoValor } })
+    const valorFinal = campoAAlterar === "Email" ? normalizeEmail(novoValor) : novoValor
+    await prisma.nucleo.update({ where: { id: nucleoId }, data: { [campoAAlterar]: valorFinal } })
     res.status(200).send(`Campo ${campoAAlterar} do núcleo ${nucleoId} atualizado com sucesso!`)
   } catch (error) {
     if (error.code === "P2025") return res.status(404).send("Núcleo não encontrado")
@@ -465,7 +481,8 @@ const putNucleoWithoutFile = async (req, res) => {
       where: { id: nucleoId },
       data: {
         ...(Nome && { Nome }),
-        ...(Email && { Email }),
+        // Normaliza para o login continuar batendo depois de uma edição.
+        ...(Email && { Email: normalizeEmail(Email) }),
         ...(Cidade && { Cidade }),
         ...(Estado && { Estado }),
         ...(Descricao && { Descricao }),
