@@ -134,8 +134,11 @@ const returnProjectsNucleo = async (req, res) => {
 
     const projetos = await prisma.projeto.findMany({ where: { NucleoResponsavel: nucleoId } })
 
+    // Núcleo sem projetos é uma coleção VAZIA, não um 404. O 404 aqui derrubava
+    // a página inteira do núcleo (o front busca núcleo e projetos juntos), então
+    // todo núcleo recém-criado aparecia como "Núcleo não encontrado".
     if (projetos.length === 0) {
-      return res.status(404).send("Nenhum projeto encontrado para este núcleo.")
+      return res.status(200).json([])
     }
 
     const projetosPorArea = {}
