@@ -181,6 +181,10 @@ const CreateNucleoByAdmin = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(senha, 12)
 
+    // Gera o subdomínio como no cadastro público. Sem ele, o núcleo ficava com
+    // slug genérico ("nucleo-11") e a URL pública era frágil e feia.
+    const subdominio = await generateUniqueSubdominio({ Nome: nomeNucleo, Cidade: cidade, Estado: estado })
+
     const nucleo = await prisma.nucleo.create({
       data: {
         Nome: nomeNucleo,
@@ -193,7 +197,7 @@ const CreateNucleoByAdmin = async (req, res) => {
         fotoCapa: null,
         linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram,
         status: "approved",
-        subdominio: null,
+        subdominio,
       },
     })
 
