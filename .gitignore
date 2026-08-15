@@ -1,8 +1,19 @@
 node_modules
+
+# Ambiente (nunca commitar segredos)
 .env
 .env.*
 !.env.example
+
+# Prisma
 /generated/prisma
+
+# Credenciais e artefatos locais
 serviceAccountKey.json
 uploads/
 server.log
+*.db
+
+# Documentacao/binarios locais
+docs/
+*.pdf
