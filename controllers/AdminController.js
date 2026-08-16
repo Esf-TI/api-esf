@@ -2,6 +2,7 @@ const bcrypt = require("bcrypt")
 const prisma = require("../lib/prismaClient")
 const { generateTokens, refreshAccessToken } = require("../middlewares/authFunctions")
 const { normalizeEmail, emailWhereInsensitive } = require("../lib/email")
+const { validarSenha, REGRA_SENHA } = require("../lib/password")
 const { GetAllNucleos, GetNucleoById, CreateNucleo } = require("./NucleosControllers")
 
 const logAdminAction = async (adminId, action, details = {}) => {
@@ -65,8 +66,9 @@ const create = async (req, res) => {
       return res.status(400).json({ success: false, message: "Formato de email inválido" })
     }
 
-    if (password.length < 8) {
-      return res.status(400).json({ success: false, message: "A senha deve ter pelo menos 8 caracteres" })
+    const errosSenha = validarSenha(password)
+    if (errosSenha.length > 0) {
+      return res.status(400).json({ success: false, message: REGRA_SENHA, errors: errosSenha })
     }
 
     const existing = await prisma.admin.findFirst({ where: { email: emailWhereInsensitive(email) } })

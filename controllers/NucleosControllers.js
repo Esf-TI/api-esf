@@ -14,6 +14,7 @@ const {
 const { getPagination } = require("../lib/pagination")
 const { normalizeEmail, emailWhereInsensitive } = require("../lib/email")
 const { parseDataLocal, isDataFutura } = require("../lib/dates")
+const { validarSenha, REGRA_SENHA } = require("../lib/password")
 require("dotenv").config()
 
 /** Piso para displayTotal quando há poucos cadastros aprovados (alinhado ao `DEFAULT_NUCLEOS_EXIBICAO_PISO` no front). */
@@ -37,8 +38,8 @@ const validateNucleoData = (data) => {
     errors.push("Formato de email inválido")
   }
 
-  if (data.senha && data.senha.length < 8) {
-    errors.push("A senha deve ter pelo menos 8 caracteres")
+  if (data.senha) {
+    errors.push(...validarSenha(data.senha))
   }
 
   return errors
@@ -159,8 +160,9 @@ const CreateNucleoByAdmin = async (req, res) => {
       return res.status(400).json({ success: false, message: "Formato de email inválido" })
     }
 
-    if (senha.length < 8) {
-      return res.status(400).json({ success: false, message: "A senha deve ter pelo menos 8 caracteres" })
+    const errosSenha = validarSenha(senha)
+    if (errosSenha.length > 0) {
+      return res.status(400).json({ success: false, message: REGRA_SENHA, errors: errosSenha })
     }
 
     let dataFundacaoParsed = null

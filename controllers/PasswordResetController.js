@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken")
 const nodemailer = require("nodemailer")
 const prisma = require("../lib/prismaClient")
 const { normalizeEmail, emailWhereInsensitive } = require("../lib/email")
+const { validarSenha, REGRA_SENHA } = require("../lib/password")
 require("dotenv").config()
 
 // Reutiliza o mesmo segredo base usado nos tokens de acesso.
@@ -132,8 +133,9 @@ const resetPassword = async (req, res) => {
       return res.status(400).json({ success: false, message: "Token e nova senha são obrigatórios" })
     }
 
-    if (String(novaSenha).length < 8) {
-      return res.status(400).json({ success: false, message: "A senha deve ter pelo menos 8 caracteres" })
+    const errosSenha = validarSenha(novaSenha)
+    if (errosSenha.length > 0) {
+      return res.status(400).json({ success: false, message: REGRA_SENHA, errors: errosSenha })
     }
 
     // Lê id/type sem verificar assinatura (o segredo depende do hash atual do usuário).
