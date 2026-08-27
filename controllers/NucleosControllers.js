@@ -15,6 +15,7 @@ const { getPagination } = require("../lib/pagination")
 const { normalizeEmail, emailWhereInsensitive } = require("../lib/email")
 const { parseDataLocal, isDataFutura } = require("../lib/dates")
 const { validarSenha, REGRA_SENHA } = require("../lib/password")
+const { confirmacaoFundarNucleo } = require("../lib/emailLayout")
 require("dotenv").config()
 
 /** Piso para displayTotal quando há poucos cadastros aprovados (alinhado ao `DEFAULT_NUCLEOS_EXIBICAO_PISO` no front). */
@@ -464,11 +465,13 @@ const interestFoundingNucleo = async (req, res) => {
     auth: { user: process.env.EMAIL_TRANSPORTER, pass: process.env.PASSWORD_TRANSPORTER },
   })
 
+  // Interesses em fundar nucleo sao acompanhados pela equipe de acompanhamento,
+  // nao pelo sysadmin (definicao da organizacao em 20/08/2026).
+  const destinoEquipe = process.env.EMAIL_FUNDAR_NUCLEO || "equipe.acompanhamento@esf.org.br"
+
   const mailOptions = {
     from: process.env.EMAIL_TRANSPORTER,
-    // Interesses em fundar nucleo sao acompanhados pela equipe de acompanhamento,
-    // nao pelo sysadmin (definicao da organizacao em 20/08/2026).
-    to: process.env.EMAIL_FUNDAR_NUCLEO || "equipe.acompanhamento@esf.org.br",
+    to: destinoEquipe,
     // Sem isto, o "Responder" do Gmail volta para o noreply e não havia como
     // retornar o contato do interessado.
     replyTo: email,
@@ -485,10 +488,29 @@ ${history}
 Para responder ao interessado, use o "Responder" deste e-mail.`,
   }
 
+  // Confirmacao para o interessado, com o mesmo layout dos outros formularios.
+  const confirmacao = confirmacaoFundarNucleo({ nome: name, cidade: city, mensagem: history })
+
+  transporter
+    .sendMail({
+      from: process.env.EMAIL_TRANSPORTER,
+      to: email,
+      // Se a pessoa responder a confirmacao, cai na caixa da equipe.
+      replyTo: destinoEquipe,
+      subject: confirmacao.subject,
+      text: confirmacao.text,
+      html: confirmacao.html,
+    })
+    .then(() => console.log(`[interestFoundingNucleo] Confirmacao enviada para ${email}`))
+    .catch((error) =>
+      console.error("[interestFoundingNucleo] Falha ao enviar confirmacao:", error.message),
+    )
+
   // Envia o e-mail fora do caminho da resposta: não bloqueia o cliente esperando o SMTP.
   // O interesse já está gravado, então uma falha aqui não perde o contato.
   transporter
     .sendMail(mailOptions)
+    .then(() => console.log(`[interestFoundingNucleo] Aviso enviado para ${destinoEquipe}`))
     .catch((error) =>
       console.error(
         "[interestFoundingNucleo] Falha ao enviar e-mail:",
