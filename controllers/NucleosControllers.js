@@ -440,6 +440,25 @@ const interestFoundingNucleo = async (req, res) => {
     return res.status(400).send({ error: "Todos os campos são obrigatórios." })
   }
 
+  // Grava ANTES de enviar, mesmo motivo do formulário de contato: o e-mail era o
+  // único destino do interesse, então uma falha de SMTP fazia o contato do
+  // interessado se perder sem nenhum registro (caso real em 18/08/2026, em que o
+  // e-mail do interessado ficou irrecuperável).
+  let registro = null
+  try {
+    registro = await prisma.nucleoInterestMessage.create({
+      data: {
+        nome: String(name).trim(),
+        email: normalizeEmail(email),
+        cidade: String(city).trim(),
+        mensagem: String(history).trim(),
+        status: "new",
+      },
+    })
+  } catch (error) {
+    console.error("[interestFoundingNucleo] Falha ao gravar interesse no banco:", error.message)
+  }
+
   const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: { user: process.env.EMAIL_TRANSPORTER, pass: process.env.PASSWORD_TRANSPORTER },
@@ -448,14 +467,33 @@ const interestFoundingNucleo = async (req, res) => {
   const mailOptions = {
     from: process.env.EMAIL_TRANSPORTER,
     to: process.env.FINAL_EMAIL,
+    // Sem isto, o "Responder" do Gmail volta para o noreply e não havia como
+    // retornar o contato do interessado.
+    replyTo: email,
     subject: `Mensagem de ${name} fundar nucleo`,
-    text: `${name} está interessado em fundar um núcleo!\n\nCidade: ${city}\n\nMensagem: ${history}`,
+    text: `${name} está interessado em fundar um núcleo!
+
+E-mail: ${email}
+Cidade: ${city}
+
+Mensagem:
+${history}
+
+------------------
+Para responder ao interessado, use o "Responder" deste e-mail.`,
   }
 
   // Envia o e-mail fora do caminho da resposta: não bloqueia o cliente esperando o SMTP.
+  // O interesse já está gravado, então uma falha aqui não perde o contato.
   transporter
     .sendMail(mailOptions)
-    .catch((error) => console.error("[interestFoundingNucleo] Falha ao enviar e-mail:", error.message))
+    .catch((error) =>
+      console.error(
+        "[interestFoundingNucleo] Falha ao enviar e-mail:",
+        error.message,
+        registro ? `(interesse salvo com id ${registro.id})` : "(interesse NÃO salvo no banco)",
+      ),
+    )
 
   return res.send("success")
 }

@@ -27,6 +27,7 @@ model Admin {
   resultados               Resultado[]
   nucleos_approved         Nucleo[]                 @relation("ApprovedBy")
   contatos_replied         ContatoMessage[]         @relation("RepliedBy")
+  interesses_nucleo        NucleoInterestMessage[]  @relation("NucleoInterestRepliedBy")
 
   @@index([status])
 }
@@ -319,4 +320,27 @@ model ContatoMessage {
   @@index([replied_by])
   @@index([created_at])
   @@map("contato_messages")
+}
+
+/// Interesses em fundar núcleo enviados pelo formulário público
+/// ("Área dos Núcleos → Quero fundar um Núcleo"). Antes o e-mail para o
+/// sysadmin era o único registro, e ele não incluía o endereço do interessado —
+/// não havia como retornar o contato.
+model NucleoInterestMessage {
+  id         Int       @id @default(autoincrement())
+  nome       String    @db.VarChar(255)
+  email      String    @db.VarChar(255)
+  cidade     String    @db.VarChar(255)
+  mensagem   String    @db.Text
+  status     String    @default("new") @db.VarChar(50)
+  replied_by Int?
+  replied_at DateTime?
+  created_at DateTime  @default(now())
+
+  replier Admin? @relation("NucleoInterestRepliedBy", fields: [replied_by], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([replied_by])
+  @@index([created_at])
+  @@map("nucleo_interest_messages")
 }
