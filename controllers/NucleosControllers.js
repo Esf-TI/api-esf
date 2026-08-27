@@ -466,7 +466,9 @@ const interestFoundingNucleo = async (req, res) => {
 
   const mailOptions = {
     from: process.env.EMAIL_TRANSPORTER,
-    to: process.env.FINAL_EMAIL,
+    // Interesses em fundar nucleo sao acompanhados pela equipe de acompanhamento,
+    // nao pelo sysadmin (definicao da organizacao em 20/08/2026).
+    to: process.env.EMAIL_FUNDAR_NUCLEO || "equipe.acompanhamento@esf.org.br",
     // Sem isto, o "Responder" do Gmail volta para o noreply e não havia como
     // retornar o contato do interessado.
     replyTo: email,

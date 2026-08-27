@@ -39,7 +39,10 @@ async function enviarEmail(req, res) {
 
   const mailOptions = {
     from: process.env.EMAIL_TRANSPORTER,
-    to: process.env.FINAL_EMAIL,
+    // Destino definido pela organizacao (Roberto, 20/08/2026): tanto o formulario
+    // de Contato quanto o "Receba novidades" da home vao para contato@ — os dois
+    // caem neste endpoint, por isso um unico destino resolve ambos.
+    to: process.env.EMAIL_CONTATO || "contato@esf.org.br",
     replyTo: email,
     subject: assunto ? `Contato: ${assunto} — ${name}` : `Mensagem de ${name}`,
     text: `Você recebeu uma nova mensagem de ${name}
