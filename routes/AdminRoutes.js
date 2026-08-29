@@ -2,6 +2,7 @@ const express = require("express")
 const router = express.Router()
 const adminController = require("../controllers/AdminController")
 const nucleosController = require("../controllers/NucleosControllers")
+const adminUsuarios = require("../controllers/AdminUsuariosController")
 const { authenticateAdmin } = require("../middlewares/authFunctions")
 const prisma = require("../lib/prismaClient")
 
@@ -28,6 +29,13 @@ router.get("/profile", authenticateAdmin, async (req, res) => {
     res.status(500).json({ success: false, message: "Erro ao buscar perfil" })
   }
 })
+
+// Contas do sistema (admins, nucleos e membros) em uma visao so
+router.get("/usuarios", authenticateAdmin, adminUsuarios.listar)
+router.get("/usuarios/:tipo/:id", authenticateAdmin, adminUsuarios.detalhe)
+router.post("/usuarios/:tipo/:id/reset-senha", authenticateAdmin, adminUsuarios.enviarResetSenha)
+router.patch("/usuarios/:tipo/:id/status", authenticateAdmin, adminUsuarios.alterarStatus)
+router.delete("/usuarios/:tipo/:id", authenticateAdmin, adminUsuarios.excluir)
 
 router.get("/nucleos", authenticateAdmin, nucleosController.GetAllNucleos)
 router.get("/nucleos/:id", authenticateAdmin, nucleosController.GetNucleoById)

@@ -5,6 +5,7 @@ const prisma = require("../lib/prismaClient")
 const { normalizeEmail, emailWhereInsensitive } = require("../lib/email")
 const { validarSenha, REGRA_SENHA } = require("../lib/password")
 const { deriveSecret } = require("../lib/resetLink")
+const { recuperacaoSenha } = require("../lib/emailLayout")
 require("dotenv").config()
 
 // URL do front (onde fica a página /redefinir-senha). Sem barra final.
@@ -93,22 +94,14 @@ const requestReset = async (req, res) => {
       return genericOk()
     }
 
+    const conteudo = recuperacaoSenha({ nome: getName(type, record), link })
+
     const mailOptions = {
       from: process.env.EMAIL_TRANSPORTER,
       to: email,
-      subject: "Redefinição de senha — Engenheiros Sem Fronteiras",
-      html: `
-        <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;color:#111">
-          <h2 style="color:#00AA77">Redefinição de senha</h2>
-          <p>Olá${getName(type, record) ? `, ${getName(type, record)}` : ""}!</p>
-          <p>Recebemos um pedido para redefinir a senha da sua conta. Clique no botão abaixo para criar uma nova senha. O link expira em 1 hora.</p>
-          <p style="text-align:center;margin:28px 0">
-            <a href="${link}" style="background:#00AA77;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;display:inline-block">Redefinir minha senha</a>
-          </p>
-          <p style="font-size:12px;color:#666">Se você não solicitou isso, ignore este e-mail — sua senha continua a mesma.</p>
-          <p style="font-size:12px;color:#666;word-break:break-all">Ou copie e cole este endereço no navegador:<br>${link}</p>
-        </div>
-      `,
+      subject: conteudo.subject,
+      text: conteudo.text,
+      html: conteudo.html,
     }
 
     // Envia fora do caminho da resposta: não bloqueia o cliente esperando o SMTP.
