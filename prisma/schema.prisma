@@ -175,6 +175,9 @@ model Projeto {
   foto4             String?   @db.VarChar(500)
   foto5             String?   @db.VarChar(500)
   status            String    @default("active") @db.VarChar(50)
+  /// Coluna do quadro kanban do nucleo: planejamento | execucao | concluido | pausado.
+  /// Separado de `status` (active/inactive), que diz se o projeto aparece no site.
+  fase              String    @default("planejamento") @db.VarChar(30)
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
 
@@ -183,6 +186,7 @@ model Projeto {
   @@index([NucleoResponsavel])
   @@index([status])
   @@index([Area])
+  @@index([fase])
   @@map("Projetos")
 }
 

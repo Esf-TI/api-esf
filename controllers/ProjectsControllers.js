@@ -1,6 +1,9 @@
 const prisma = require("../lib/prismaClient")
 const { parseDataLocal, isDataFutura } = require("../lib/dates")
 
+/** Colunas do quadro kanban de projetos do nucleo. */
+const FASES_PROJETO = ["planejamento", "execucao", "concluido", "pausado"]
+
 const createProject = async (req, res) => {
   const { Nome, NucleoResponsavel, Area, descricao, PessoasImpactadas, DataFundacao, Cidade } = req.body
   const uploads = req.files
@@ -297,7 +300,7 @@ const patchProject = async (req, res) => {
     return res.status(400).send("O ID do projeto, o campo a ser alterado e o novo valor são obrigatórios")
   }
 
-  const allowedFields = ["Nome", "Area", "Descricao", "PessoasImpactadas", "Cidade", "status", "fotoCapa", "foto1", "foto2", "foto3", "foto4", "foto5"]
+  const allowedFields = ["Nome", "Area", "Descricao", "PessoasImpactadas", "Cidade", "status", "fase", "fotoCapa", "foto1", "foto2", "foto3", "foto4", "foto5"]
   if (!allowedFields.includes(campoAAlterar)) {
     return res.status(400).send("Campo não permitido para atualização")
   }
@@ -305,6 +308,11 @@ const patchProject = async (req, res) => {
   try {
     const existing = await prisma.projeto.findUnique({ where: { id: projectId } })
     if (!existing) return res.status(404).send("Projeto não encontrado")
+
+    // Coluna do kanban: valor livre viraria coluna fantasma no quadro.
+    if (campoAAlterar === "fase" && !FASES_PROJETO.includes(novoValor)) {
+      return res.status(400).send(`Fase deve ser uma de: ${FASES_PROJETO.join(", ")}`)
+    }
 
     // Campo numérico chega como string no corpo; converte para o Prisma aceitar.
     const valorFinal = campoAAlterar === "PessoasImpactadas" ? Number(novoValor) : novoValor
