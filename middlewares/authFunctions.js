@@ -31,16 +31,16 @@ async function refreshAccessToken(refreshToken) {
     const accessTokenExpires = new Date(Date.now() + 86400000)
     const refreshTokenExpires = new Date(Date.now() + 604800000)
 
+    const dados = { accessToken, refreshToken: newRefreshToken, accessTokenExpires, refreshTokenExpires }
+
+    // Despacho explicito por tipo: o `else` generico mandava qualquer tipo
+    // desconhecido para nucleoToken, o que quebraria ao surgir um terceiro ator.
     if (type === "admin") {
-      await prisma.adminToken.updateMany({
-        where: { adminId: userId },
-        data: { accessToken, refreshToken: newRefreshToken, accessTokenExpires, refreshTokenExpires },
-      })
+      await prisma.adminToken.updateMany({ where: { adminId: userId }, data: dados })
+    } else if (type === "membro") {
+      await prisma.membroToken.updateMany({ where: { membroId: userId }, data: dados })
     } else {
-      await prisma.nucleoToken.updateMany({
-        where: { nucleoId: userId },
-        data: { accessToken, refreshToken: newRefreshToken, accessTokenExpires, refreshTokenExpires },
-      })
+      await prisma.nucleoToken.updateMany({ where: { nucleoId: userId }, data: dados })
     }
 
     return { accessToken, refreshToken: newRefreshToken, accessTokenExpires, refreshTokenExpires }
@@ -128,6 +128,10 @@ function authenticateAdminOrNucleo(req, res, next) {
         const tokenRecord = await prisma.adminToken.findFirst({ where: { accessToken: token } })
         if (!tokenRecord) return res.status(403).json({ message: "Token não autorizado para esta ação" })
         req.admin = { id: decoded.userId, type: decoded.type }
+      } else if (decoded.type === "membro") {
+        // Membro nao gerencia o nucleo: recusa com mensagem clara em vez de
+        // cair na busca por nucleoToken e devolver um 403 generico.
+        return res.status(403).json({ message: "Esta ação é restrita ao núcleo" })
       } else {
         const tokenRecord = await prisma.nucleoToken.findFirst({ where: { accessToken: token } })
         if (!tokenRecord) return res.status(403).json({ message: "Token não autorizado para esta ação" })
@@ -188,12 +192,80 @@ async function ensureProjetoDoNucleo(req, res, next) {
   }
 }
 
+/**
+ * Autentica um membro de nucleo (terceiro ator, ao lado de admin e nucleo).
+ */
+function authenticateMembro(req, res, next) {
+  const authHeader = req.headers["authorization"]
+  const token = authHeader && authHeader.split(" ")[1]
+
+  if (!token) {
+    return res.status(401).json({ message: "Token não fornecido" })
+  }
+
+  jwt.verify(token, accessTokenSecret, async (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ message: "Token inválido ou expirado" })
+    }
+
+    if (decoded.type !== "membro") {
+      return res.status(403).json({ message: "Token não é de um membro" })
+    }
+
+    try {
+      const tokenRecord = await prisma.membroToken.findFirst({ where: { accessToken: token } })
+      if (!tokenRecord) {
+        return res.status(403).json({ message: "Token não autorizado para esta ação" })
+      }
+
+      req.membro = { id: decoded.userId, type: decoded.type }
+      req.user = decoded
+      next()
+    } catch (error) {
+      return res.status(500).json({ message: "Erro ao validar o token" })
+    }
+  })
+}
+
+/**
+ * Garante que o membro alvo pertence ao nucleo autenticado — mesmo papel que
+ * `ensureProjetoDoNucleo` faz para projetos. Admin passa direto.
+ */
+async function ensureMembroDoNucleo(req, res, next) {
+  if (req.admin) return next()
+
+  const membroId = Number(req.params.id)
+  if (!Number.isFinite(membroId)) {
+    return res.status(400).json({ success: false, message: "ID de membro inválido" })
+  }
+
+  try {
+    const membro = await prisma.nucleoMembro.findUnique({
+      where: { id: membroId },
+      select: { nucleoId: true },
+    })
+
+    if (!membro) return res.status(404).json({ success: false, message: "Membro não encontrado" })
+
+    if (!req.nucleo || membro.nucleoId !== req.nucleo.id) {
+      return res.status(403).json({ success: false, message: "Este membro pertence a outro núcleo" })
+    }
+
+    next()
+  } catch (error) {
+    console.error("Erro ao validar posse do membro:", error)
+    return res.status(500).json({ success: false, message: "Erro ao validar acesso ao membro" })
+  }
+}
+
 module.exports = {
   generateTokens,
   refreshAccessToken,
   authenticateAdmin,
   authenticateNucleo,
   authenticateAdminOrNucleo,
+  authenticateMembro,
   ensureNucleoSelf,
   ensureProjetoDoNucleo,
+  ensureMembroDoNucleo,
 }

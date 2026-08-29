@@ -4,24 +4,16 @@ const nodemailer = require("nodemailer")
 const prisma = require("../lib/prismaClient")
 const { normalizeEmail, emailWhereInsensitive } = require("../lib/email")
 const { validarSenha, REGRA_SENHA } = require("../lib/password")
+const { deriveSecret } = require("../lib/resetLink")
 require("dotenv").config()
-
-// Reutiliza o mesmo segredo base usado nos tokens de acesso.
-const BASE_SECRET = process.env.ACCESS_TOKEN_SECRET || process.env.JWT_SECRET || "esf-fallback-secret"
 
 // URL do front (onde fica a página /redefinir-senha). Sem barra final.
 const FRONTEND_URL = String(process.env.FRONTEND_URL || "https://esf.org.br").replace(/\/+$/, "")
 
 const RESET_TOKEN_TTL = "1h"
 
-/**
- * Segredo por-usuário derivado do hash de senha atual. Assim, quando a senha é
- * trocada o hash muda e qualquer token de reset emitido antes deixa de valer —
- * efeito "uso único" sem precisar de tabela/coluna extra no banco.
- */
-function deriveSecret(entityType, passwordHash) {
-  return `${BASE_SECRET}:${entityType}:${passwordHash}`
-}
+// `deriveSecret` vive em lib/resetLink.js: o convite de membro emite o mesmo
+// tipo de token, e duplicar a derivação faria os dois fluxos divergirem.
 
 function buildTransporter() {
   return nodemailer.createTransport({
@@ -44,15 +36,25 @@ async function findAccountByEmail(email) {
   })
   if (nucleo) return { type: "nucleo", record: nucleo }
 
+  const membro = await prisma.nucleoMembro.findFirst({
+    where: { email: emailWhereInsensitive(email) },
+  })
+  if (membro) return { type: "membro", record: membro }
+
   return null
 }
 
 function getHash(type, record) {
-  return type === "admin" ? record.senha : record.Senha
+  if (type === "admin") return record.senha
+  // Membro usa `senha` minúsculo e pode estar nulo (convite ainda não aceito).
+  if (type === "membro") return record.senha
+  return record.Senha
 }
 
 function getName(type, record) {
-  return type === "admin" ? record.nome : record.Nome
+  if (type === "admin") return record.nome
+  if (type === "membro") return record.nome
+  return record.Nome
 }
 
 /**
@@ -156,6 +158,8 @@ const resetPassword = async (req, res) => {
       record = await prisma.admin.findUnique({ where: { id: Number(id) } })
     } else if (type === "nucleo") {
       record = await prisma.nucleo.findUnique({ where: { id: Number(id) } })
+    } else if (type === "membro") {
+      record = await prisma.nucleoMembro.findUnique({ where: { id: Number(id) } })
     }
 
     if (!record) {
@@ -176,6 +180,12 @@ const resetPassword = async (req, res) => {
         prisma.admin.update({ where: { id: record.id }, data: { senha: hashedPassword } }),
         // Invalida sessões ativas: força novo login com a senha nova.
         prisma.adminToken.deleteMany({ where: { adminId: record.id } }),
+      ])
+    } else if (type === "membro") {
+      // Mesma rota atende o convite: aqui o membro sai de senha nula para ativo.
+      await prisma.$transaction([
+        prisma.nucleoMembro.update({ where: { id: record.id }, data: { senha: hashedPassword } }),
+        prisma.membroToken.deleteMany({ where: { membroId: record.id } }),
       ])
     } else {
       await prisma.$transaction([

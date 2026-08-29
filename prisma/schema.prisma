@@ -132,9 +132,10 @@ model Nucleo {
   created_at       DateTime  @default(now())
   updated_at       DateTime  @updatedAt
 
-  approver Admin?        @relation("ApprovedBy", fields: [approved_by], references: [id], onDelete: SetNull)
+  approver Admin?         @relation("ApprovedBy", fields: [approved_by], references: [id], onDelete: SetNull)
   projetos Projeto[]
   tokens   NucleoToken[]
+  membros  NucleoMembro[]
 
   @@index([status])
   @@index([Estado])
@@ -343,4 +344,51 @@ model NucleoInterestMessage {
   @@index([replied_by])
   @@index([created_at])
   @@map("nucleo_interest_messages")
+}
+
+/// Membros (voluntarios) de um nucleo. Tem login proprio: `senha` fica nula ate
+/// a pessoa aceitar o convite e definir a senha pelo link enviado por e-mail —
+/// senha nunca trafega por e-mail.
+model NucleoMembro {
+  id               Int       @id @default(autoincrement())
+  nucleoId         Int
+  nome             String    @db.VarChar(255)
+  email            String    @unique @db.VarChar(255)
+  senha            String?   @db.VarChar(255)
+  /// membro | coordenador
+  papel            String    @default("membro") @db.VarChar(50)
+  curso            String?   @db.VarChar(255)
+  telefone         String?   @db.VarChar(20)
+  foto_url         String?   @db.VarChar(500)
+  data_entrada     DateTime? @db.Date
+  data_saida       DateTime? @db.Date
+  /// ativo | inativo | desligado
+  status           String    @default("ativo") @db.VarChar(50)
+  /// LGPD: so aparece no perfil publico do nucleo com consentimento explicito
+  exibir_no_site   Boolean   @default(false)
+  consentimento_em DateTime?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  nucleo Nucleo        @relation(fields: [nucleoId], references: [id], onDelete: Cascade)
+  tokens MembroToken[]
+
+  @@index([nucleoId])
+  @@index([status])
+  @@map("nucleo_membros")
+}
+
+model MembroToken {
+  id                  Int      @id @default(autoincrement())
+  membroId            Int
+  accessToken         String   @db.VarChar(512)
+  refreshToken        String   @db.VarChar(512)
+  accessTokenExpires  DateTime
+  refreshTokenExpires DateTime
+  created_at          DateTime @default(now())
+
+  membro NucleoMembro @relation(fields: [membroId], references: [id], onDelete: Cascade)
+
+  @@index([membroId])
+  @@map("membro_tokens")
 }
