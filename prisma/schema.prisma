@@ -181,7 +181,8 @@ model Projeto {
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
 
-  nucleo Nucleo? @relation(fields: [NucleoResponsavel], references: [id], onDelete: Cascade)
+  nucleo  Nucleo?         @relation(fields: [NucleoResponsavel], references: [id], onDelete: Cascade)
+  tarefas ProjetoTarefa[]
 
   @@index([NucleoResponsavel])
   @@index([status])
@@ -374,8 +375,9 @@ model NucleoMembro {
   created_at       DateTime  @default(now())
   updated_at       DateTime  @updatedAt
 
-  nucleo Nucleo        @relation(fields: [nucleoId], references: [id], onDelete: Cascade)
-  tokens MembroToken[]
+  nucleo  Nucleo          @relation(fields: [nucleoId], references: [id], onDelete: Cascade)
+  tokens  MembroToken[]
+  tarefas ProjetoTarefa[]
 
   @@index([nucleoId])
   @@index([status])
@@ -395,4 +397,29 @@ model MembroToken {
 
   @@index([membroId])
   @@map("membro_tokens")
+}
+
+/// Tarefas do quadro interno de um projeto (segundo nivel do kanban).
+/// `ordem` guarda a posicao dentro da coluna: sem ela, reabrir o quadro
+/// devolveria os cards em ordem arbitraria do banco.
+model ProjetoTarefa {
+  id            Int       @id @default(autoincrement())
+  projetoId     Int
+  titulo        String    @db.VarChar(255)
+  descricao     String?   @db.Text
+  /// a_fazer | fazendo | feito
+  coluna        String    @default("a_fazer") @db.VarChar(30)
+  ordem         Int       @default(0)
+  responsavelId Int?
+  prazo         DateTime? @db.Date
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  projeto     Projeto       @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+  responsavel NucleoMembro? @relation(fields: [responsavelId], references: [id], onDelete: SetNull)
+
+  @@index([projetoId])
+  @@index([coluna])
+  @@index([responsavelId])
+  @@map("projeto_tarefas")
 }

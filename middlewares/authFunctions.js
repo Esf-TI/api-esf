@@ -258,6 +258,38 @@ async function ensureMembroDoNucleo(req, res, next) {
   }
 }
 
+/**
+ * Garante que a tarefa alvo pertence a um projeto do nucleo autenticado.
+ * Resolve tarefa -> projeto -> nucleo; sem isso, o :id da tarefa deixaria
+ * qualquer nucleo mexer no quadro de outro. Admin passa direto.
+ */
+async function ensureTarefaDoNucleo(req, res, next) {
+  if (req.admin) return next()
+
+  const tarefaId = Number(req.params.id)
+  if (!Number.isFinite(tarefaId)) {
+    return res.status(400).json({ success: false, message: "ID de tarefa inválido" })
+  }
+
+  try {
+    const tarefa = await prisma.projetoTarefa.findUnique({
+      where: { id: tarefaId },
+      select: { projeto: { select: { NucleoResponsavel: true } } },
+    })
+
+    if (!tarefa) return res.status(404).json({ success: false, message: "Tarefa não encontrada" })
+
+    if (!req.nucleo || tarefa.projeto?.NucleoResponsavel !== req.nucleo.id) {
+      return res.status(403).json({ success: false, message: "Esta tarefa pertence a outro núcleo" })
+    }
+
+    next()
+  } catch (error) {
+    console.error("Erro ao validar posse da tarefa:", error)
+    return res.status(500).json({ success: false, message: "Erro ao validar acesso à tarefa" })
+  }
+}
+
 module.exports = {
   generateTokens,
   refreshAccessToken,
@@ -268,4 +300,5 @@ module.exports = {
   ensureNucleoSelf,
   ensureProjetoDoNucleo,
   ensureMembroDoNucleo,
+  ensureTarefaDoNucleo,
 }
