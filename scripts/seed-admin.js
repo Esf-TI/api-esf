@@ -4,8 +4,27 @@ const { PrismaPg } = require("@prisma/adapter-pg")
 const { PrismaClient } = require("@prisma/client")
 const bcrypt = require("bcrypt")
 
-const DEFAULT_ADMIN_EMAIL = "admin@esf.org.br"
-const DEFAULT_ADMIN_PASSWORD = "Admin@123"
+const crypto = require("crypto")
+
+const DEFAULT_ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@esf.org.br"
+
+/**
+ * Gera uma senha forte aleatoria para o admin inicial.
+ *
+ * Havia aqui uma senha fixa no codigo. Como o repositorio e
+ * publico, qualquer pessoa que o abrisse tinha a credencial do super_admin de
+ * producao — e a conta seguia com ela desde abril de 2026. Agora: usa
+ * ADMIN_PASSWORD se estiver definida no ambiente; senao sorteia uma e imprime
+ * UMA vez no log do primeiro boot, para o responsavel trocar em seguida.
+ */
+function gerarSenhaInicial() {
+  const alfabeto = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+  const simbolos = "!@#$%&*?"
+  const sorteia = (fonte, n) =>
+    Array.from({ length: n }, () => fonte[crypto.randomInt(fonte.length)]).join("")
+  // Atende a regra do sistema: 10+ caracteres, com numero e caractere especial.
+  return sorteia(alfabeto, 14) + sorteia("23456789", 1) + sorteia(simbolos, 1)
+}
 const BOOTSTRAP_RETRY_ATTEMPTS = Number(process.env.BOOTSTRAP_RETRY_ATTEMPTS || 6)
 const BOOTSTRAP_RETRY_DELAY_MS = Number(process.env.BOOTSTRAP_RETRY_DELAY_MS || 2000)
 
@@ -47,7 +66,9 @@ async function ensureDefaultAdmin() {
         return
       }
 
-      const hash = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 12)
+      const senhaInicial = process.env.ADMIN_PASSWORD || gerarSenhaInicial()
+      const veioDoAmbiente = Boolean(process.env.ADMIN_PASSWORD)
+      const hash = await bcrypt.hash(senhaInicial, 12)
       const admin = await prisma.admin.create({
         data: {
           nome: "Administrador ESF",
@@ -58,7 +79,14 @@ async function ensureDefaultAdmin() {
         },
       })
 
-      console.log("[bootstrap] Admin padrão criado — email:", admin.email, "| troque a senha em produção.")
+      if (veioDoAmbiente) {
+        console.log("[bootstrap] Admin criado com a senha de ADMIN_PASSWORD — email:", admin.email)
+      } else {
+        // Unica vez que a senha aparece: nao fica gravada em lugar nenhum.
+        console.log("[bootstrap] Admin criado — email:", admin.email)
+        console.log("[bootstrap] SENHA INICIAL (anote agora, nao sera exibida de novo):", senhaInicial)
+        console.log("[bootstrap] Troque a senha no primeiro acesso.")
+      }
       return
     } catch (error) {
       const lastAttempt = attempt === BOOTSTRAP_RETRY_ATTEMPTS
@@ -85,4 +113,4 @@ if (require.main === module) {
   })
 }
 
-module.exports = { ensureDefaultAdmin, DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD }
+module.exports = { ensureDefaultAdmin, DEFAULT_ADMIN_EMAIL }
