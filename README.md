@@ -84,7 +84,8 @@ Veja `.env.example`. As essenciais:
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Storage de imagens e PDFs |
 | `ACCESS_TOKEN_SECRET` / `REFRESH_TOKEN_SECRET` | Assinatura dos JWTs |
 | `EMAIL_TRANSPORTER` / `PASSWORD_TRANSPORTER` | Conta Gmail que envia (use **senha de app**) |
-| `FINAL_EMAIL` | Destino do formulário de contato |
+| `EMAIL_CONTATO` | Destino dos formulários de Contato e “Receba novidades” |
+| `EMAIL_FUNDAR_NUCLEO` | Destino do formulário “Quero fundar um Núcleo” |
 | `FRONTEND_URL` | Base dos links enviados por e-mail (ex.: redefinição de senha) |
 
 > `FRONTEND_URL` é obrigatória para o "esqueci minha senha" funcionar: é ela que
