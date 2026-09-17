@@ -1,7 +1,11 @@
 const express = require("express")
 const router = express.Router()
 const multer = require("multer")
-const { authenticateAdmin } = require("../middlewares/authFunctions")
+const { authenticateAdmin, requireAdminRole } = require("../middlewares/authFunctions")
+
+// Conteudo institucional: superadmin ou o admin de conteudo. O admin de
+// materiais nao alcanca esta area.
+const conteudo = requireAdminRole("conteudo")
 const { publicCache } = require("../middlewares/cacheControl")
 const ResultadosController = require("../controllers/ResultadosController")
 
@@ -24,8 +28,8 @@ router.get("/", publicCache(60), ResultadosController.listar)
 router.get("/:id", publicCache(60), ResultadosController.buscarPorId)
 
 // Rotas administrativas
-router.post("/", authenticateAdmin, upload.single("arquivo"), ResultadosController.criar)
-router.put("/:id", authenticateAdmin, upload.single("arquivo"), ResultadosController.atualizar)
-router.delete("/:id", authenticateAdmin, ResultadosController.deletar)
+router.post("/", authenticateAdmin, conteudo, upload.single("arquivo"), ResultadosController.criar)
+router.put("/:id", authenticateAdmin, conteudo, upload.single("arquivo"), ResultadosController.atualizar)
+router.delete("/:id", authenticateAdmin, conteudo, ResultadosController.deletar)
 
 module.exports = router

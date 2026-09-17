@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken")
 require("dotenv").config()
 const moment = require("moment")
 const prisma = require("../lib/prismaClient")
+const { normalizarPapel, papelAtende } = require("../lib/adminRoles")
 
 const accessTokenSecret = process.env.ACCESS_TOKEN_SECRET || process.env.JWT_SECRET
 const refreshTokenSecret = process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET
@@ -64,18 +65,53 @@ function authenticateAdmin(req, res, next) {
     }
 
     try {
-      const tokenRecord = await prisma.adminToken.findFirst({ where: { accessToken: token } })
+      // Traz o papel e o status junto com o token: `requireAdminRole` precisa do
+      // papel e não deve custar uma segunda consulta, e uma conta desativada
+      // seguia entrando enquanto o token dela não expirasse.
+      const tokenRecord = await prisma.adminToken.findFirst({
+        where: { accessToken: token },
+        select: { admin: { select: { id: true, role: true, status: true } } },
+      })
       if (!tokenRecord) {
         return res.status(403).json({ message: "Token não autorizado para esta ação" })
       }
 
-      req.admin = { id: decoded.userId, type: decoded.type }
+      if (tokenRecord.admin?.status !== "active") {
+        return res.status(403).json({ message: "Esta conta de administrador está desativada" })
+      }
+
+      req.admin = { id: decoded.userId, type: decoded.type, role: normalizarPapel(tokenRecord.admin.role) }
       req.user = decoded
       next()
     } catch (error) {
       return res.status(500).json({ message: "Erro ao validar o token" })
     }
   })
+}
+
+/**
+ * Restringe a rota a determinados papéis de admin. Vai SEMPRE depois de
+ * `authenticateAdmin` (ou de `authenticateAdminOrNucleo`), que é quem carrega
+ * `req.admin.role`. Superadmin passa em tudo — ver `lib/adminRoles`.
+ *
+ * Uso: router.post("/", authenticateAdmin, requireAdminRole("conteudo"), ...)
+ */
+function requireAdminRole(...permitidos) {
+  return (req, res, next) => {
+    if (!req.admin) {
+      return res.status(403).json({ success: false, message: "Esta ação é restrita a administradores" })
+    }
+
+    if (!papelAtende(req.admin.role, permitidos)) {
+      return res.status(403).json({
+        success: false,
+        message: "Seu usuário não tem permissão para esta área",
+        code: "PAPEL_INSUFICIENTE",
+      })
+    }
+
+    next()
+  }
 }
 
 function authenticateNucleo(req, res, next) {
@@ -125,9 +161,15 @@ function authenticateAdminOrNucleo(req, res, next) {
 
     try {
       if (decoded.type === "admin") {
-        const tokenRecord = await prisma.adminToken.findFirst({ where: { accessToken: token } })
+        const tokenRecord = await prisma.adminToken.findFirst({
+          where: { accessToken: token },
+          select: { admin: { select: { id: true, role: true, status: true } } },
+        })
         if (!tokenRecord) return res.status(403).json({ message: "Token não autorizado para esta ação" })
-        req.admin = { id: decoded.userId, type: decoded.type }
+        if (tokenRecord.admin?.status !== "active") {
+          return res.status(403).json({ message: "Esta conta de administrador está desativada" })
+        }
+        req.admin = { id: decoded.userId, type: decoded.type, role: normalizarPapel(tokenRecord.admin.role) }
       } else if (decoded.type === "membro") {
         // Membro nao gerencia o nucleo: recusa com mensagem clara em vez de
         // cair na busca por nucleoToken e devolver um 403 generico.
@@ -290,6 +332,53 @@ async function ensureTarefaDoNucleo(req, res, next) {
   }
 }
 
+/**
+ * Identifica o ator quando há token válido e deixa passar quando não há.
+ *
+ * Serve às listagens que mostram um recorte para visitante e o acervo inteiro
+ * para quem está logado (materiais). Diferente dos demais, nunca responde 401:
+ * token ausente, expirado ou revogado apenas resulta em requisição anônima.
+ */
+function authenticateOpcional(req, res, next) {
+  const authHeader = req.headers["authorization"]
+  const token = authHeader && authHeader.split(" ")[1]
+
+  if (!token) return next()
+
+  jwt.verify(token, accessTokenSecret, async (err, decoded) => {
+    if (err) return next()
+
+    try {
+      if (decoded.type === "admin") {
+        const tokenRecord = await prisma.adminToken.findFirst({
+          where: { accessToken: token },
+          select: { admin: { select: { id: true, role: true, status: true } } },
+        })
+        if (tokenRecord && tokenRecord.admin?.status === "active") {
+          req.admin = { id: decoded.userId, type: decoded.type, role: normalizarPapel(tokenRecord.admin.role) }
+          req.user = decoded
+        }
+      } else if (decoded.type === "membro") {
+        const tokenRecord = await prisma.membroToken.findFirst({ where: { accessToken: token } })
+        if (tokenRecord) {
+          req.membro = { id: decoded.userId, type: decoded.type }
+          req.user = decoded
+        }
+      } else {
+        const tokenRecord = await prisma.nucleoToken.findFirst({ where: { accessToken: token } })
+        if (tokenRecord) {
+          req.nucleo = { id: decoded.userId, type: decoded.type }
+          req.user = decoded
+        }
+      }
+    } catch (error) {
+      console.error("Erro ao identificar ator opcional:", error)
+    }
+
+    next()
+  })
+}
+
 module.exports = {
   generateTokens,
   refreshAccessToken,
@@ -297,6 +386,8 @@ module.exports = {
   authenticateNucleo,
   authenticateAdminOrNucleo,
   authenticateMembro,
+  authenticateOpcional,
+  requireAdminRole,
   ensureNucleoSelf,
   ensureProjetoDoNucleo,
   ensureMembroDoNucleo,

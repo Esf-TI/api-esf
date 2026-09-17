@@ -35,6 +35,7 @@ scripts/              Tarefas operacionais (seeds, migração de uploads)
 | `/admin` | `AdminRoutes.js` | Painel administrativo |
 | `/auth` | `AuthRoutes.js` | Recuperação de senha |
 | `/blog`, `/anais`, `/livros`, `/transparencia`, `/governanca`, `/resultados` | respectivos | Conteúdo institucional |
+| `/materiais` | `MateriaisRoutes.js` | Acervo que os núcleos acessam depois do login |
 | `/contato` | `ContatoRoutes.js` | Formulário de contato |
 | `/api/upload` | `UploadRouter.js` | Upload de PDFs e capas |
 
@@ -50,8 +51,29 @@ scripts/              Tarefas operacionais (seeds, migração de uploads)
 - `ensureNucleoSelf` — impede que um núcleo altere dados de outro
 - `ensureProjetoDoNucleo` — garante que o projeto pertence ao núcleo autenticado
 
+- `authenticateOpcional` — identifica o ator se houver token e deixa passar se não
+  houver; usado pela listagem de materiais, que mostra menos para visitante
+- `requireAdminRole(...papeis)` — vai **depois** de `authenticateAdmin` e restringe
+  a rota a determinados papéis de admin
+
 Toda rota que **escreve** dados precisa de um desses. Rotas de leitura pública
 usam allow-list de campos (`NUCLEO_PUBLIC_SELECT`) para nunca vazar e-mail ou senha.
+
+### Papéis de administrador
+
+`Admin.role` existia desde o início e era devolvido no login, mas nenhuma rota o
+consultava: na prática todo admin podia tudo. O vocabulário vive em
+`lib/adminRoles.js`:
+
+| Papel | Alcança |
+|---|---|
+| `superadmin` | Tudo |
+| `conteudo` | Blog, publicações, livros, transparência, governança, resultados e uploads |
+| `materiais` | Somente `/materiais` |
+
+Contas criadas antes desta mudança têm `role = "admin"`, que é normalizado para
+`superadmin` — ninguém perde acesso no deploy. `authenticateAdmin` carrega o papel
+junto com o token (sem consulta extra) e recusa conta desativada.
 
 ## Rodando local
 

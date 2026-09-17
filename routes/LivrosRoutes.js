@@ -2,7 +2,11 @@ const express = require("express")
 const router = express.Router()
 const LivrosController = require("../controllers/LivrosController")
 const { publicCache } = require("../middlewares/cacheControl")
-const { authenticateAdmin } = require("../middlewares/authFunctions")
+const { authenticateAdmin, requireAdminRole } = require("../middlewares/authFunctions")
+
+// Conteudo institucional: superadmin ou o admin de conteudo. O admin de
+// materiais nao alcanca esta area.
+const conteudo = requireAdminRole("conteudo")
 const { body } = require("express-validator")
 
 const createValidation = [
@@ -17,9 +21,9 @@ router.get("/stats", publicCache(120), LivrosController.stats)
 router.get("/:id", publicCache(60), LivrosController.show)
 
 // Rotas administrativas — exigem admin autenticado.
-router.get("/", authenticateAdmin, LivrosController.index)
-router.post("/", authenticateAdmin, createValidation, LivrosController.store)
-router.put("/:id", authenticateAdmin, LivrosController.update)
-router.delete("/:id", authenticateAdmin, LivrosController.destroy)
+router.get("/", authenticateAdmin, conteudo, LivrosController.index)
+router.post("/", authenticateAdmin, conteudo, createValidation, LivrosController.store)
+router.put("/:id", authenticateAdmin, conteudo, LivrosController.update)
+router.delete("/:id", authenticateAdmin, conteudo, LivrosController.destroy)
 
 module.exports = router

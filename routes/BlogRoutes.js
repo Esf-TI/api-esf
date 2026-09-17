@@ -1,7 +1,11 @@
 const express = require("express")
 const router = express.Router()
 const BlogController = require("../controllers/BlogController")
-const { authenticateAdmin } = require("../middlewares/authFunctions")
+const { authenticateAdmin, requireAdminRole } = require("../middlewares/authFunctions")
+
+// Conteudo institucional: superadmin ou o admin de conteudo. O admin de
+// materiais nao alcanca esta area.
+const conteudo = requireAdminRole("conteudo")
 const { publicCache } = require("../middlewares/cacheControl")
 const prisma = require("../lib/prismaClient")
 const multer = require("multer")
@@ -33,22 +37,22 @@ const uploadBlogImageToSupabase = async (req, res, next) => {
   }
 }
 
-router.post("/createBlog", authenticateAdmin, upload.single("image"), uploadBlogImageToSupabase, BlogController.CreateBlog)
+router.post("/createBlog", authenticateAdmin, conteudo, upload.single("image"), uploadBlogImageToSupabase, BlogController.CreateBlog)
 router.get("/blog", publicCache(60), BlogController.returnAllBlog)
-router.get("/admin/blog", authenticateAdmin, (req, res) => {
+router.get("/admin/blog", authenticateAdmin, conteudo, (req, res) => {
   req.query.status = req.query.status || null
   BlogController.returnAllBlog(req, res)
 })
 router.get("/blog/:id", publicCache(60), BlogController.returnBlogById)
-router.patch("/updateBlog/:id", authenticateAdmin, upload.single("image"), uploadBlogImageToSupabase, BlogController.updateBlog)
-router.delete("/blog/:id", authenticateAdmin, BlogController.deleteBlog)
+router.patch("/updateBlog/:id", authenticateAdmin, conteudo, upload.single("image"), uploadBlogImageToSupabase, BlogController.updateBlog)
+router.delete("/blog/:id", authenticateAdmin, conteudo, BlogController.deleteBlog)
 
-router.get("/admin/blog/drafts", authenticateAdmin, (req, res) => {
+router.get("/admin/blog/drafts", authenticateAdmin, conteudo, (req, res) => {
   req.query.status = "draft"
   BlogController.returnAllBlog(req, res)
 })
 
-router.get("/admin/blog/stats", authenticateAdmin, async (req, res) => {
+router.get("/admin/blog/stats", authenticateAdmin, conteudo, async (req, res) => {
   try {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 

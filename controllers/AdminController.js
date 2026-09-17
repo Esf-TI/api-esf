@@ -3,6 +3,7 @@ const prisma = require("../lib/prismaClient")
 const { generateTokens, refreshAccessToken } = require("../middlewares/authFunctions")
 const { normalizeEmail, emailWhereInsensitive } = require("../lib/email")
 const { validarSenha, REGRA_SENHA } = require("../lib/password")
+const { PAPEIS_VALIDOS, SUPERADMIN, normalizarPapel } = require("../lib/adminRoles")
 const { GetAllNucleos, GetNucleoById, CreateNucleo } = require("./NucleosControllers")
 
 const logAdminAction = async (adminId, action, details = {}) => {
@@ -53,12 +54,22 @@ const updateToken = async (req, res) => {
 
 const create = async (req, res) => {
   try {
-    const { email: emailRaw, password, name, role = "admin" } = req.body
+    const { email: emailRaw, password, name, role = SUPERADMIN } = req.body
     const email = normalizeEmail(emailRaw)
 
     const validationErrors = validateInput(req.body, ["email", "password"])
     if (validationErrors.length > 0) {
       return res.status(400).json({ success: false, message: "Dados inválidos", errors: validationErrors })
+    }
+
+    // O papel vinha do corpo sem nenhuma checagem: qualquer string entrava no
+    // banco e depois caía no fallback de superadmin, que é o oposto do que um
+    // usuário de acesso limitado deveria ser.
+    if (!PAPEIS_VALIDOS.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: `Papel deve ser um de: ${PAPEIS_VALIDOS.join(", ")}`,
+      })
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -144,7 +155,9 @@ const login = async (req, res) => {
       success: true,
       message: "Login realizado com sucesso.",
       data: {
-        admin: { id: admin.id, email: admin.email, name: admin.nome, role: admin.role },
+        // Papel normalizado: contas antigas guardam "admin", e o front precisa do
+        // vocabulario novo para decidir o que mostrar no menu.
+        admin: { id: admin.id, email: admin.email, name: admin.nome, role: normalizarPapel(admin.role) },
         tokens: { accessToken, refreshToken, accessTokenExpires, refreshTokenExpires },
       },
     })

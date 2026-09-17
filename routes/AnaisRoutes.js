@@ -2,7 +2,11 @@ const express = require("express")
 const router = express.Router()
 const AnaisController = require("../controllers/AnaisController")
 const { publicCache } = require("../middlewares/cacheControl")
-const { authenticateAdmin } = require("../middlewares/authFunctions")
+const { authenticateAdmin, requireAdminRole } = require("../middlewares/authFunctions")
+
+// Conteudo institucional: superadmin ou o admin de conteudo. O admin de
+// materiais nao alcanca esta area.
+const conteudo = requireAdminRole("conteudo")
 const { body } = require("express-validator")
 
 // Validações para criação de anais
@@ -21,8 +25,8 @@ router.get("/stats", publicCache(120), AnaisController.stats)
 router.get("/:id", publicCache(60), AnaisController.show)
 
 // Rotas administrativas — exigem admin autenticado.
-router.post("/", authenticateAdmin, createValidation, AnaisController.store)
-router.put("/:id", authenticateAdmin, AnaisController.update)
-router.delete("/:id", authenticateAdmin, AnaisController.destroy)
+router.post("/", authenticateAdmin, conteudo, createValidation, AnaisController.store)
+router.put("/:id", authenticateAdmin, conteudo, AnaisController.update)
+router.delete("/:id", authenticateAdmin, conteudo, AnaisController.destroy)
 
 module.exports = router

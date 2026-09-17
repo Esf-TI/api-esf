@@ -24,6 +24,7 @@ model Admin {
   anais                    Anais[]
   livros                   Livro[]
   documentos_transparencia DocumentoTransparencia[]
+  materiais                Material[]
   resultados               Resultado[]
   nucleos_approved         Nucleo[]                 @relation("ApprovedBy")
   contatos_replied         ContatoMessage[]         @relation("RepliedBy")
@@ -242,6 +243,42 @@ model DocumentoTransparencia {
   @@index([created_by])
   @@index([created_at])
   @@map("documentos_transparencia")
+}
+
+/// Acervo que antes vivia no site interno: modelos de documento, apresentacoes,
+/// manuais e treinamentos. O nucleo alcanca depois de entrar com o e-mail dele;
+/// quem mantem e um admin com papel `materiais` (ver lib/adminRoles).
+model Material {
+  id          Int     @id @default(autoincrement())
+  titulo      String  @db.VarChar(255)
+  descricao   String? @db.Text
+  categoria   String  @db.VarChar(100)
+  /// arquivo | link — material que mora fora guarda `link_externo` em vez de arquivo
+  tipo        String  @default("arquivo") @db.VarChar(20)
+
+  arquivo_url     String? @db.VarChar(500)
+  arquivo_nome    String? @db.VarChar(255)
+  arquivo_tamanho Int?
+  link_externo    String? @db.VarChar(500)
+
+  /// nucleos | publico — `nucleos` (padrao) so aparece para quem esta logado
+  visibilidade String @default("nucleos") @db.VarChar(20)
+  /// active | inactive — tira do ar sem apagar o arquivo
+  status       String @default("active") @db.VarChar(50)
+  /// Posicao dentro da categoria; sem ela a ordem seria a do banco
+  ordem        Int    @default(0)
+
+  created_by Int?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  creator Admin? @relation(fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@index([categoria])
+  @@index([visibilidade])
+  @@index([status])
+  @@index([created_by])
+  @@map("materiais")
 }
 
 model GovernancaMembro {

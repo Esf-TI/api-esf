@@ -1,5 +1,6 @@
 const nodemailer = require("nodemailer")
 const prisma = require("../lib/prismaClient")
+const { normalizarPapel } = require("../lib/adminRoles")
 const { gerarTokenSenha, linkDefinicaoSenha } = require("../lib/resetLink")
 const { recuperacaoSenha } = require("../lib/emailLayout")
 require("dotenv").config()
@@ -39,7 +40,7 @@ function normalizarAdmin(a) {
     email: a.email,
     status: a.status,
     ativo: a.status === STATUS_ATIVO.admin,
-    papel: a.role,
+    papel: normalizarPapel(a.role),
     vinculo: null,
     ultimo_acesso: a.last_login,
     created_at: a.created_at,
