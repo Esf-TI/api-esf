@@ -12,7 +12,7 @@ const {
   NUCLEO_ADMIN_SELECT,
 } = require("../lib/nucleoSlug")
 const { getPagination } = require("../lib/pagination")
-const { normalizeEmail, emailWhereInsensitive } = require("../lib/email")
+const { normalizeEmail, emailWhereInsensitive, isEmailEsf } = require("../lib/email")
 const { parseDataLocal, isDataFutura } = require("../lib/dates")
 const { validarSenha, REGRA_SENHA } = require("../lib/password")
 const { confirmacaoFundarNucleo } = require("../lib/emailLayout")
@@ -37,6 +37,8 @@ const validateNucleoData = (data) => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   if (data.email && !emailRegex.test(data.email)) {
     errors.push("Formato de email inválido")
+  } else if (data.email && !isEmailEsf(data.email)) {
+    errors.push("Use um e-mail institucional @esf.org.br")
   }
 
   if (data.senha) {
