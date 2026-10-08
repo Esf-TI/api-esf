@@ -50,6 +50,7 @@ router.get("/papeis", authenticateAdmin, superadmin, (req, res) => {
 router.get("/usuarios", authenticateAdmin, superadmin, adminUsuarios.listar)
 router.get("/usuarios/:tipo/:id", authenticateAdmin, superadmin, adminUsuarios.detalhe)
 router.post("/usuarios/:tipo/:id/reset-senha", authenticateAdmin, superadmin, adminUsuarios.enviarResetSenha)
+router.put("/usuarios/:tipo/:id", authenticateAdmin, superadmin, adminUsuarios.atualizar)
 router.patch("/usuarios/:tipo/:id/status", authenticateAdmin, superadmin, adminUsuarios.alterarStatus)
 router.delete("/usuarios/:tipo/:id", authenticateAdmin, superadmin, adminUsuarios.excluir)
 
