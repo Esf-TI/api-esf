@@ -460,3 +460,16 @@ model ProjetoTarefa {
   @@index([responsavelId])
   @@map("projeto_tarefas")
 }
+
+/// Cidades com nucleo ativo exibidas no mapa da pagina Quem Somos (curadoria do admin)
+model NucleoMapa {
+  id         Int      @id @default(autoincrement())
+  uf         String   @db.VarChar(2)
+  cidade     String   @db.VarChar(120)
+  ordem      Int      @default(0)
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  @@unique([uf, cidade])
+  @@map("nucleo_mapa")
+}
