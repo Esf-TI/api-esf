@@ -37,7 +37,7 @@ const singleImagem = multer({
 }).single("imagem")
 
 // UPLOAD DE IMAGEM AVULSA (retorna URL pública no bucket projetos)
-router.post("/upload-imagem", authenticateAdminOrNucleo, singleImagem, async (req, res) => {
+router.post("/upload-imagem", authenticateAtor, exigirPapelDeProjeto, singleImagem, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Nenhuma imagem enviada" })
   const image = req.file
   let buffer = image.buffer
