@@ -50,6 +50,9 @@ const ehAutor = (req, atividade) => {
   return atividade.autor_tipo === a.tipo && atividade.autor_id === a.id
 }
 
+/** Marca no card se o usuário logado pode editá-lo ou excluí-lo (a tela esconde os botões). */
+const comPermissao = (req, atividade) => ({ ...atividade, pode_editar: ehGestor(req) || ehAutor(req, atividade) })
+
 async function responsavelValido(nucleoId, responsavelId) {
   const membro = await prisma.nucleoMembro.findUnique({
     where: { id: Number(responsavelId) },
@@ -73,7 +76,7 @@ const AtividadesController = {
         orderBy: [{ coluna: "asc" }, { ordem: "asc" }, { id: "asc" }],
         select: SELECT,
       })
-      return res.json({ success: true, data: atividades, total: atividades.length })
+      return res.json({ success: true, data: atividades.map((a) => comPermissao(req, a)), total: atividades.length })
     } catch (error) {
       console.error("Erro ao listar atividades:", error)
       return res.status(500).json({ success: false, message: "Erro ao listar atividades" })
@@ -125,7 +128,7 @@ const AtividadesController = {
       })
 
       registrar(req, { acao: "atividade.criada", entidade: "atividade", entidadeId: atividade.id, nucleoId, depois: atividade })
-      return res.status(201).json({ success: true, message: "Atividade criada", data: atividade })
+      return res.status(201).json({ success: true, message: "Atividade criada", data: comPermissao(req, atividade) })
     } catch (error) {
       console.error("Erro ao criar atividade:", error)
       return res.status(500).json({ success: false, message: "Erro ao criar atividade" })
@@ -180,7 +183,7 @@ const AtividadesController = {
         nucleoId: atual.nucleoId,
         ...diferenca(atual, data),
       })
-      return res.json({ success: true, message: "Atividade atualizada", data: atividade })
+      return res.json({ success: true, message: "Atividade atualizada", data: comPermissao(req, atividade) })
     } catch (error) {
       console.error("Erro ao atualizar atividade:", error)
       return res.status(500).json({ success: false, message: "Erro ao atualizar atividade" })

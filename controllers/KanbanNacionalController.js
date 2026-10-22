@@ -41,6 +41,9 @@ const ehAutor = (req, card) => {
   return card.autor_tipo === a.tipo && card.autor_id === a.id
 }
 
+/** Marca no card se o usuário logado pode editá-lo ou excluí-lo (a tela esconde os botões). */
+const comPermissao = (req, card) => ({ ...card, pode_editar: ehModerador(req) || ehAutor(req, card) })
+
 const KanbanNacionalController = {
   /** GET /kanban-nacional — qualquer perfil logado vê o quadro nacional. */
   async listar(req, res) {
@@ -49,7 +52,7 @@ const KanbanNacionalController = {
         orderBy: [{ coluna: "asc" }, { ordem: "asc" }, { id: "asc" }],
         select: SELECT,
       })
-      return res.json({ success: true, data: cards, total: cards.length })
+      return res.json({ success: true, data: cards.map((c) => comPermissao(req, c)), total: cards.length })
     } catch (error) {
       console.error("Erro ao listar kanban nacional:", error)
       return res.status(500).json({ success: false, message: "Erro ao listar o quadro nacional" })
@@ -92,7 +95,7 @@ const KanbanNacionalController = {
       })
 
       registrar(req, { acao: "card_nacional.criado", entidade: "card_nacional", entidadeId: card.id, nucleoId: card.nucleo_id, depois: card })
-      return res.status(201).json({ success: true, message: "Card criado", data: card })
+      return res.status(201).json({ success: true, message: "Card criado", data: comPermissao(req, card) })
     } catch (error) {
       console.error("Erro ao criar card nacional:", error)
       return res.status(500).json({ success: false, message: "Erro ao criar card" })
@@ -143,7 +146,7 @@ const KanbanNacionalController = {
         nucleoId: atual.nucleo_id,
         ...diferenca(atual, data),
       })
-      return res.json({ success: true, message: "Card atualizado", data: card })
+      return res.json({ success: true, message: "Card atualizado", data: comPermissao(req, card) })
     } catch (error) {
       console.error("Erro ao atualizar card nacional:", error)
       return res.status(500).json({ success: false, message: "Erro ao atualizar card" })
