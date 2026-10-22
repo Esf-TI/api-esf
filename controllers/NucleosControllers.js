@@ -13,6 +13,7 @@ const {
 } = require("../lib/nucleoSlug")
 const { getPagination } = require("../lib/pagination")
 const { normalizeEmail, emailWhereInsensitive, isEmailEsf } = require("../lib/email")
+const { registrar, diferenca } = require("../lib/auditoria")
 const { parseDataLocal, isDataFutura } = require("../lib/dates")
 const { validarSenha, REGRA_SENHA } = require("../lib/password")
 const { confirmacaoFundarNucleo } = require("../lib/emailLayout")
@@ -56,12 +57,14 @@ const deleteNucleo = async (req, res) => {
   }
 
   try {
+    const anterior = await prisma.nucleo.findUnique({ where: { id: nucleoId } })
     await prisma.$transaction([
       prisma.nucleoToken.deleteMany({ where: { nucleoId } }),
       prisma.projeto.deleteMany({ where: { NucleoResponsavel: nucleoId } }),
       prisma.nucleo.delete({ where: { id: nucleoId } }),
     ])
 
+    registrar(req, { acao: "nucleo.excluido", entidade: "nucleo", entidadeId: nucleoId, nucleoId, antes: anterior })
     return res.status(200).json({ success: true, message: "Núcleo excluído com sucesso" })
   } catch (error) {
     if (error.code === "P2025") {
@@ -206,6 +209,7 @@ const CreateNucleoByAdmin = async (req, res) => {
       },
     })
 
+    registrar(req, { acao: "nucleo.criado", entidade: "nucleo", entidadeId: nucleo.id, nucleoId: nucleo.id, depois: nucleo })
     res.status(201).json({ success: true, message: "Núcleo criado com sucesso pelo administrador!", data: { id: nucleo.id, nome: nucleo.Nome, email, cidade, status: "approved" } })
   } catch (error) {
     if (error.code === "P2002") {
@@ -408,7 +412,16 @@ const patchNucleo = async (req, res) => {
 
   try {
     const valorFinal = campoAAlterar === "Email" ? normalizeEmail(novoValor) : novoValor
+    const anterior = await prisma.nucleo.findUnique({ where: { id: nucleoId }, select: { [campoAAlterar]: true } })
     await prisma.nucleo.update({ where: { id: nucleoId }, data: { [campoAAlterar]: valorFinal } })
+    registrar(req, {
+      acao: "nucleo.campo_alterado",
+      entidade: "nucleo",
+      entidadeId: nucleoId,
+      nucleoId,
+      antes: { [campoAAlterar]: anterior?.[campoAAlterar] ?? null },
+      depois: { [campoAAlterar]: valorFinal },
+    })
     res.status(200).send(`Campo ${campoAAlterar} do núcleo ${nucleoId} atualizado com sucesso!`)
   } catch (error) {
     if (error.code === "P2025") return res.status(404).send("Núcleo não encontrado")
@@ -428,7 +441,16 @@ const updateNucleoFoto = async (req, res) => {
   }
 
   try {
+    const anterior = await prisma.nucleo.findUnique({ where: { id: nucleoId }, select: { fotoCapa: true } })
     await prisma.nucleo.update({ where: { id: nucleoId }, data: { fotoCapa: upload.publicUrl } })
+    registrar(req, {
+      acao: "nucleo.foto_alterada",
+      entidade: "nucleo",
+      entidadeId: nucleoId,
+      nucleoId,
+      antes: { fotoCapa: anterior?.fotoCapa ?? null },
+      depois: { fotoCapa: upload.publicUrl },
+    })
     return res.status(200).send("Foto do núcleo atualizada com sucesso")
   } catch (error) {
     console.error(error)
@@ -579,7 +601,8 @@ const putNucleoWithoutFile = async (req, res) => {
   const { Nome, Email, Cidade, Estado, Descricao, DataFundacao, fotoCapa, foto1, foto2, foto3, linkDoacao, linkSite, linkLinkedin, linkFacebook, linkInstagram, logoUrl, corPrimaria, Endereco } = req.body
 
   try {
-    await prisma.nucleo.update({
+    const anterior = await prisma.nucleo.findUnique({ where: { id: nucleoId } })
+    const atualizado = await prisma.nucleo.update({
       where: { id: nucleoId },
       data: {
         ...(Nome && { Nome }),
@@ -607,6 +630,13 @@ const putNucleoWithoutFile = async (req, res) => {
       },
     })
 
+    registrar(req, {
+      acao: "nucleo.editado",
+      entidade: "nucleo",
+      entidadeId: nucleoId,
+      nucleoId,
+      ...diferenca(anterior, atualizado),
+    })
     res.status(200).json({ success: true, message: "Núcleo atualizado com sucesso", data: { nucleoId } })
   } catch (error) {
     if (error.code === "P2025") return res.status(404).json({ success: false, message: "Núcleo não encontrado" })

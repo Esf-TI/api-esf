@@ -26,7 +26,9 @@ const MEMBRO_SELECT = {
   created_at: true,
 }
 
-const PAPEIS = ["membro", "coordenador"]
+const { registrar, diferenca } = require("../lib/auditoria")
+
+const PAPEIS = ["membro", "coordenador", "diretor"]
 const STATUS = ["ativo", "inativo", "desligado"]
 
 /** O convite vale mais que o reset comum: a pessoa pode demorar para abrir. */
@@ -91,6 +93,15 @@ const listarDoNucleo = async (req, res) => {
       select: { ...MEMBRO_SELECT, senha: true },
     })
 
+    // Membro vê a equipe só para escolher responsável e saber quem é quem:
+    // nada de e-mail, telefone ou curso dos colegas.
+    if (req.membro) {
+      const enxuta = membros
+        .filter((m) => m.status === "ativo")
+        .map((m) => ({ id: m.id, nome: m.nome, papel: m.papel, status: m.status }))
+      return res.json({ success: true, data: enxuta, total: enxuta.length })
+    }
+
     const data = membros.map(({ senha, ...m }) => comPendencia(m, Boolean(senha)))
 
     return res.json({ success: true, data, total: data.length })
@@ -154,6 +165,8 @@ const criar = async (req, res) => {
 
     enviarConvite(membro, nucleo.Nome)
 
+    registrar(req, { acao: "membro.criado", entidade: "membro", entidadeId: membro.id, nucleoId, depois: membro })
+
     return res.status(201).json({
       success: true,
       message: "Membro cadastrado. Enviamos um convite para ele definir a senha.",
@@ -178,10 +191,7 @@ const atualizar = async (req, res) => {
   }
 
   try {
-    const atual = await prisma.nucleoMembro.findUnique({
-      where: { id },
-      select: { exibir_no_site: true, consentimento_em: true },
-    })
+    const atual = await prisma.nucleoMembro.findUnique({ where: { id } })
     if (!atual) return res.status(404).json({ success: false, message: "Membro não encontrado" })
 
     const data = {}
@@ -202,6 +212,13 @@ const atualizar = async (req, res) => {
 
     const membro = await prisma.nucleoMembro.update({ where: { id }, data, select: MEMBRO_SELECT })
 
+    registrar(req, {
+      acao: data.papel !== undefined && data.papel !== atual.papel ? "membro.perfil_alterado" : "membro.editado",
+      entidade: "membro",
+      entidadeId: id,
+      nucleoId: atual.nucleoId,
+      ...diferenca(atual, data),
+    })
     return res.json({ success: true, message: "Membro atualizado", data: membro })
   } catch (error) {
     console.error("Erro ao atualizar membro:", error)
@@ -217,6 +234,7 @@ const desligar = async (req, res) => {
   const id = Number(req.params.id)
 
   try {
+    const anterior = await prisma.nucleoMembro.findUnique({ where: { id } })
     const membro = await prisma.nucleoMembro.update({
       where: { id },
       data: {
@@ -231,6 +249,14 @@ const desligar = async (req, res) => {
     // Encerra a sessao: sem isso o desligado continuaria logado ate o token expirar.
     await prisma.membroToken.deleteMany({ where: { membroId: id } })
 
+    registrar(req, {
+      acao: "membro.desligado",
+      entidade: "membro",
+      entidadeId: id,
+      nucleoId: anterior?.nucleoId ?? null,
+      antes: anterior,
+      depois: membro,
+    })
     return res.json({ success: true, message: "Membro desligado", data: membro })
   } catch (error) {
     console.error("Erro ao desligar membro:", error)

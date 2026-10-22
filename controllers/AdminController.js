@@ -250,6 +250,7 @@ const updateNucleoStatus = async (req, res) => {
     // Persiste a moderação: `rejection_reason`, `approved_by` e `approved_at`
     // existiam no schema e eram devolvidos ao painel, mas nada os gravava — a
     // justificativa escrita pelo admin se perdia (o campo ficava sempre null).
+    const anterior = await prisma.nucleo.findUnique({ where: { id: nucleoId }, select: { status: true, rejection_reason: true } })
     const nucleo = await prisma.nucleo.update({
       where: { id: nucleoId },
       data: {
@@ -260,6 +261,14 @@ const updateNucleoStatus = async (req, res) => {
       },
     })
 
+    require("../lib/auditoria").registrar(req, {
+      acao: "nucleo.status_alterado",
+      entidade: "nucleo",
+      entidadeId: nucleoId,
+      nucleoId,
+      antes: { status: anterior?.status ?? null, rejection_reason: anterior?.rejection_reason ?? null },
+      depois: { status, rejection_reason: nucleo.rejection_reason },
+    })
     await logAdminAction(adminId, "NUCLEO_STATUS_UPDATED", { nucleoId, newStatus: status, reason: reason || "No reason provided" })
 
     res.json({

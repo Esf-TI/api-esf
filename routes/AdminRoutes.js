@@ -48,6 +48,7 @@ router.get("/papeis", authenticateAdmin, superadmin, (req, res) => {
 
 // Contas do sistema (admins, nucleos e membros) em uma visao so
 router.get("/usuarios", authenticateAdmin, superadmin, adminUsuarios.listar)
+router.post("/usuarios", authenticateAdmin, superadmin, adminUsuarios.criar)
 router.get("/usuarios/:tipo/:id", authenticateAdmin, superadmin, adminUsuarios.detalhe)
 router.post("/usuarios/:tipo/:id/reset-senha", authenticateAdmin, superadmin, adminUsuarios.enviarResetSenha)
 router.put("/usuarios/:tipo/:id", authenticateAdmin, superadmin, adminUsuarios.atualizar)

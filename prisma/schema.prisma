@@ -133,10 +133,11 @@ model Nucleo {
   created_at       DateTime  @default(now())
   updated_at       DateTime  @updatedAt
 
-  approver Admin?         @relation("ApprovedBy", fields: [approved_by], references: [id], onDelete: SetNull)
-  projetos Projeto[]
-  tokens   NucleoToken[]
-  membros  NucleoMembro[]
+  approver   Admin?            @relation("ApprovedBy", fields: [approved_by], references: [id], onDelete: SetNull)
+  projetos   Projeto[]
+  tokens     NucleoToken[]
+  membros    NucleoMembro[]
+  atividades NucleoAtividade[]
 
   @@index([status])
   @@index([Estado])
@@ -182,8 +183,8 @@ model Projeto {
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
 
-  nucleo  Nucleo?         @relation(fields: [NucleoResponsavel], references: [id], onDelete: Cascade)
-  tarefas ProjetoTarefa[]
+  nucleo                 Nucleo?           @relation(fields: [NucleoResponsavel], references: [id], onDelete: Cascade)
+  tarefas                ProjetoTarefa[]
 
   @@index([NucleoResponsavel])
   @@index([status])
@@ -249,12 +250,12 @@ model DocumentoTransparencia {
 /// manuais e treinamentos. O nucleo alcanca depois de entrar com o e-mail dele;
 /// quem mantem e um admin com papel `materiais` (ver lib/adminRoles).
 model Material {
-  id          Int     @id @default(autoincrement())
-  titulo      String  @db.VarChar(255)
-  descricao   String? @db.Text
-  categoria   String  @db.VarChar(100)
+  id        Int     @id @default(autoincrement())
+  titulo    String  @db.VarChar(255)
+  descricao String? @db.Text
+  categoria String  @db.VarChar(100)
   /// arquivo | link — material que mora fora guarda `link_externo` em vez de arquivo
-  tipo        String  @default("arquivo") @db.VarChar(20)
+  tipo      String  @default("arquivo") @db.VarChar(20)
 
   arquivo_url     String? @db.VarChar(500)
   arquivo_nome    String? @db.VarChar(255)
@@ -412,9 +413,10 @@ model NucleoMembro {
   created_at       DateTime  @default(now())
   updated_at       DateTime  @updatedAt
 
-  nucleo  Nucleo          @relation(fields: [nucleoId], references: [id], onDelete: Cascade)
-  tokens  MembroToken[]
-  tarefas ProjetoTarefa[]
+  nucleo           Nucleo            @relation(fields: [nucleoId], references: [id], onDelete: Cascade)
+  tokens           MembroToken[]
+  tarefas          ProjetoTarefa[]
+  nucleoAtividades NucleoAtividade[]
 
   @@index([nucleoId])
   @@index([status])
@@ -472,4 +474,79 @@ model NucleoMapa {
 
   @@unique([uf, cidade])
   @@map("nucleo_mapa")
+}
+
+/// Historico de alteracoes: quem fez o que, quando, com o antes e o depois.
+/// O autor e polimorfico (admin, nucleo ou membro), por isso nao ha FK.
+model AuditoriaLog {
+  id          Int      @id @default(autoincrement())
+  /// admin | nucleo | membro | sistema
+  ator_tipo   String   @db.VarChar(20)
+  ator_id     Int?
+  ator_nome   String?  @db.VarChar(255)
+  ator_papel  String?  @db.VarChar(50)
+  nucleo_id   Int?
+  /// ex.: projeto.fase_alterada, membro.desligado
+  acao        String   @db.VarChar(100)
+  entidade    String   @db.VarChar(50)
+  entidade_id Int?
+  antes       Json?
+  depois      Json?
+  ip          String?  @db.VarChar(64)
+  user_agent  String?  @db.VarChar(255)
+  created_at  DateTime @default(now())
+
+  @@index([entidade, entidade_id])
+  @@index([nucleo_id])
+  @@index([created_at])
+  @@index([ator_tipo, ator_id])
+  @@map("auditoria_logs")
+}
+
+/// Cards de atividade interna do nucleo (sem projeto). Qualquer perfil do nucleo cria.
+model NucleoAtividade {
+  id            Int       @id @default(autoincrement())
+  nucleoId      Int
+  titulo        String    @db.VarChar(255)
+  descricao     String?   @db.Text
+  /// a_fazer | fazendo | feito
+  coluna        String    @default("a_fazer") @db.VarChar(30)
+  ordem         Int       @default(0)
+  responsavelId Int?
+  prazo         DateTime? @db.Date
+  autor_tipo    String    @db.VarChar(20)
+  autor_id      Int
+  autor_nome    String?   @db.VarChar(255)
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  nucleo      Nucleo        @relation(fields: [nucleoId], references: [id], onDelete: Cascade)
+  responsavel NucleoMembro? @relation(fields: [responsavelId], references: [id], onDelete: SetNull)
+
+  @@index([nucleoId])
+  @@index([coluna])
+  @@index([responsavelId])
+  @@map("nucleo_atividades")
+}
+
+/// Kanban Nacional: todos os perfis logados criam cards.
+model CardNacional {
+  id               Int       @id @default(autoincrement())
+  titulo           String    @db.VarChar(255)
+  descricao        String?   @db.Text
+  /// a_fazer | fazendo | feito
+  coluna           String    @default("a_fazer") @db.VarChar(30)
+  ordem            Int       @default(0)
+  responsavel_nome String?   @db.VarChar(255)
+  prazo            DateTime? @db.Date
+  nucleo_id        Int?
+  autor_tipo       String    @db.VarChar(20)
+  autor_id         Int
+  autor_nome       String?   @db.VarChar(255)
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  @@index([coluna])
+  @@index([nucleo_id])
+  @@map("cards_nacionais")
 }

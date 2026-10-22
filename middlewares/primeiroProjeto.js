@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken")
 const prisma = require("../lib/prismaClient")
+const { normalizarPapel, SUPERADMIN } = require("../lib/adminRoles")
 require("dotenv").config()
 
 const accessTokenSecret = process.env.ACCESS_TOKEN_SECRET || process.env.JWT_SECRET
@@ -28,9 +29,45 @@ async function permitirPrimeiroProjetoOuAutenticar(req, res, next) {
 
       try {
         if (decoded.type === "admin") {
-          const rec = await prisma.adminToken.findFirst({ where: { accessToken: token } })
+          const rec = await prisma.adminToken.findFirst({
+            where: { accessToken: token },
+            select: { admin: { select: { status: true, role: true } } },
+          })
           if (!rec) return res.status(403).json({ success: false, message: "Token não autorizado" })
-          req.admin = { id: decoded.userId, type: decoded.type }
+          if (rec.admin?.status !== "active") {
+            return res.status(403).json({ success: false, message: "Esta conta de administrador está desativada" })
+          }
+          const role = normalizarPapel(rec.admin.role)
+          if (role !== SUPERADMIN) {
+            return res.status(403).json({ success: false, message: "Seu usuário não tem permissão para esta área" })
+          }
+          req.admin = { id: decoded.userId, type: decoded.type, role }
+          return next()
+        }
+
+        if (decoded.type === "membro") {
+          const rec = await prisma.membroToken.findFirst({
+            where: { accessToken: token },
+            select: { membro: { select: { id: true, nome: true, papel: true, nucleoId: true, status: true } } },
+          })
+          if (!rec || rec.membro?.status !== "ativo") {
+            return res.status(403).json({ success: false, message: "Token não autorizado" })
+          }
+          const { papel, nucleoId } = rec.membro
+          if (!["diretor", "coordenador"].includes(papel)) {
+            return res.status(403).json({
+              success: false,
+              message: "Seu perfil não pode criar projetos. Peça ao Diretor ou ao Coordenador.",
+              code: "PAPEL_INSUFICIENTE",
+            })
+          }
+          const alvoMembro = Number(req.body?.NucleoResponsavel)
+          if (Number.isFinite(alvoMembro) && alvoMembro !== nucleoId) {
+            return res.status(403).json({ success: false, message: "Você só pode criar projetos no seu próprio núcleo" })
+          }
+          // O formulario de projeto exige o nucleo; para membro ele e sempre o proprio.
+          req.body = { ...(req.body || {}), NucleoResponsavel: nucleoId }
+          req.membro = { id: decoded.userId, type: decoded.type, nome: rec.membro.nome, papel, nucleoId }
           return next()
         }
 

@@ -4,6 +4,8 @@ const { parseDataLocal, isDataFutura } = require("../lib/dates")
 /** Colunas do quadro kanban de projetos do nucleo. */
 const FASES_PROJETO = ["planejamento", "execucao", "concluido", "pausado"]
 
+const { registrar, diferenca } = require("../lib/auditoria")
+
 const createProject = async (req, res) => {
   const { Nome, NucleoResponsavel, Area, descricao, PessoasImpactadas, DataFundacao, Cidade } = req.body
   const uploads = req.files
@@ -31,7 +33,7 @@ const createProject = async (req, res) => {
     // eram pagas em storage e descartadas (só o edit as gravava).
     const fotosUrls = (uploads?.foto || []).map((f) => f.publicUrl)
 
-    await prisma.projeto.create({
+    const criado = await prisma.projeto.create({
       data: {
         Nome,
         NucleoResponsavel: Number(NucleoResponsavel),
@@ -49,6 +51,13 @@ const createProject = async (req, res) => {
       },
     })
 
+    registrar(req, {
+      acao: "projeto.criado",
+      entidade: "projeto",
+      entidadeId: criado.id,
+      nucleoId: criado.NucleoResponsavel,
+      depois: criado,
+    })
     res.status(200).send("Projeto criado com sucesso!")
   } catch (error) {
     console.error("Erro ao criar Projeto:", error)
@@ -84,7 +93,7 @@ const createProjectDentro = async (req, res) => {
     const nucleo = await prisma.nucleo.findUnique({ where: { id: Number(NucleoResponsavel) } })
     if (!nucleo) return res.status(400).send("Núcleo responsável não encontrado")
 
-    await prisma.projeto.create({
+    const criado = await prisma.projeto.create({
       data: {
         Nome,
         NucleoResponsavel: Number(NucleoResponsavel),
@@ -100,6 +109,13 @@ const createProjectDentro = async (req, res) => {
       },
     })
 
+    registrar(req, {
+      acao: "projeto.criado",
+      entidade: "projeto",
+      entidadeId: criado.id,
+      nucleoId: criado.NucleoResponsavel,
+      depois: criado,
+    })
     res.status(200).send("Projeto criado com sucesso!")
   } catch (error) {
     console.error("Erro ao criar Projeto:", error)
@@ -190,7 +206,7 @@ const editProjectById = async (req, res) => {
     const fotoCapa = uploads?.fotoCapa?.publicUrl ?? existing.fotoCapa
     const fotosUrls = (uploads?.foto || []).map((f) => f.publicUrl)
 
-    await prisma.projeto.update({
+    const atualizado = await prisma.projeto.update({
       where: { id: projectId },
       data: {
         Nome,
@@ -210,6 +226,13 @@ const editProjectById = async (req, res) => {
       },
     })
 
+    registrar(req, {
+      acao: "projeto.editado",
+      entidade: "projeto",
+      entidadeId: projectId,
+      nucleoId: existing.NucleoResponsavel,
+      ...diferenca(existing, atualizado),
+    })
     res.status(200).send("Projeto editado com sucesso!")
   } catch (error) {
     console.error("Erro ao editar Projeto:", error)
@@ -283,6 +306,13 @@ const editProjectByIdWithout = async (req, res) => {
       },
     })
 
+    registrar(req, {
+      acao: "projeto.editado",
+      entidade: "projeto",
+      entidadeId: projectId,
+      nucleoId: existing.NucleoResponsavel,
+      ...diferenca(existing, updated),
+    })
     res.status(200).json({ message: "Projeto editado com sucesso!", projectId, data: updated })
   } catch (error) {
     console.error("Erro ao editar Projeto:", error)
@@ -321,6 +351,14 @@ const patchProject = async (req, res) => {
     }
 
     await prisma.projeto.update({ where: { id: projectId }, data: { [campoAAlterar]: valorFinal } })
+    registrar(req, {
+      acao: campoAAlterar === "fase" ? "projeto.fase_alterada" : "projeto.campo_alterado",
+      entidade: "projeto",
+      entidadeId: projectId,
+      nucleoId: existing.NucleoResponsavel,
+      antes: { [campoAAlterar]: existing[campoAAlterar] },
+      depois: { [campoAAlterar]: valorFinal },
+    })
     res.status(200).send(`Campo ${campoAAlterar} do projeto ${projectId} atualizado com sucesso!`)
   } catch (error) {
     console.error("Erro ao atualizar campo do projeto:", error)
@@ -337,7 +375,16 @@ const updatePhotoCapaProjeto = async (req, res) => {
   }
 
   try {
+    const anterior = await prisma.projeto.findUnique({ where: { id: projectId }, select: { fotoCapa: true, NucleoResponsavel: true } })
     await prisma.projeto.update({ where: { id: projectId }, data: { fotoCapa: upload.publicUrl } })
+    registrar(req, {
+      acao: "projeto.foto_alterada",
+      entidade: "projeto",
+      entidadeId: projectId,
+      nucleoId: anterior?.NucleoResponsavel ?? null,
+      antes: { fotoCapa: anterior?.fotoCapa ?? null },
+      depois: { fotoCapa: upload.publicUrl },
+    })
     return res.status(200).send("Foto do núcleo atualizada com sucesso")
   } catch (error) {
     console.error(error)
@@ -349,7 +396,15 @@ const deleteProjectById = async (req, res) => {
   const projectId = Number(req.params.id)
 
   try {
+    const anterior = await prisma.projeto.findUnique({ where: { id: projectId } })
     await prisma.projeto.delete({ where: { id: projectId } })
+    registrar(req, {
+      acao: "projeto.excluido",
+      entidade: "projeto",
+      entidadeId: projectId,
+      nucleoId: anterior?.NucleoResponsavel ?? null,
+      antes: anterior,
+    })
     res.status(200).send("Projeto excluído com sucesso!")
   } catch (error) {
     if (error.code === "P2025") return res.status(404).send("Projeto não encontrado")

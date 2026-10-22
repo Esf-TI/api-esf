@@ -3,6 +3,8 @@ const supabase = require("../lib/supabaseClient")
 const { uploadPublicBuffer } = require("../lib/storageService")
 const { getPagination, buildMeta } = require("../lib/pagination")
 
+const { registrar, diferenca } = require("../lib/auditoria")
+
 const BUCKET = "materiais"
 
 const TIPOS = ["arquivo", "link"]
@@ -203,6 +205,9 @@ const MateriaisController = {
         )
       )
 
+      criados.forEach((m) =>
+        registrar(req, { acao: "material.criado", entidade: "material", entidadeId: m.id, depois: m })
+      )
       res.status(201).json({
         success: true,
         message: `${criados.length} material(is) criado(s) com sucesso`,
@@ -273,6 +278,12 @@ const MateriaisController = {
       }
 
       const material = await prisma.material.update({ where: { id }, data: dados })
+      registrar(req, {
+        acao: "material.editado",
+        entidade: "material",
+        entidadeId: id,
+        ...diferenca(existente, material),
+      })
       res.json({ success: true, data: material })
     } catch (error) {
       console.error("Erro ao atualizar material:", error)
@@ -294,6 +305,7 @@ const MateriaisController = {
 
       await removerArquivo(existente.arquivo_url)
       await prisma.material.delete({ where: { id } })
+      registrar(req, { acao: "material.excluido", entidade: "material", entidadeId: id, antes: existente })
 
       res.json({ success: true, message: "Material excluído com sucesso" })
     } catch (error) {

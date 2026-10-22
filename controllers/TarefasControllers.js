@@ -2,6 +2,8 @@ const prisma = require("../lib/prismaClient")
 require("dotenv").config()
 
 /** Colunas do quadro interno do projeto. */
+const { registrar, diferenca } = require("../lib/auditoria")
+
 const COLUNAS = ["a_fazer", "fazendo", "feito"]
 
 const TAREFA_SELECT = {
@@ -59,6 +61,12 @@ const listarDoProjeto = async (req, res) => {
   }
 }
 
+/** Nucleo dono do projeto: o historico da tarefa fica visivel para esse nucleo. */
+async function nucleoDoProjeto(projetoId) {
+  const p = await prisma.projeto.findUnique({ where: { id: projetoId }, select: { NucleoResponsavel: true } })
+  return p?.NucleoResponsavel ?? null
+}
+
 /** POST /tarefas/projeto/:id */
 const criar = async (req, res) => {
   const projetoId = Number(req.params.id)
@@ -100,6 +108,13 @@ const criar = async (req, res) => {
       select: TAREFA_SELECT,
     })
 
+    registrar(req, {
+      acao: "tarefa.criada",
+      entidade: "tarefa",
+      entidadeId: tarefa.id,
+      nucleoId: await nucleoDoProjeto(projetoId),
+      depois: tarefa,
+    })
     return res.status(201).json({ success: true, message: "Tarefa criada", data: tarefa })
   } catch (error) {
     console.error("Erro ao criar tarefa:", error)
@@ -117,7 +132,7 @@ const atualizar = async (req, res) => {
   }
 
   try {
-    const atual = await prisma.projetoTarefa.findUnique({ where: { id }, select: { projetoId: true } })
+    const atual = await prisma.projetoTarefa.findUnique({ where: { id } })
     if (!atual) return res.status(404).json({ success: false, message: "Tarefa não encontrada" })
 
     if (responsavelId != null && !(await responsavelValido(atual.projetoId, responsavelId))) {
@@ -134,6 +149,13 @@ const atualizar = async (req, res) => {
 
     const tarefa = await prisma.projetoTarefa.update({ where: { id }, data, select: TAREFA_SELECT })
 
+    registrar(req, {
+      acao: coluna !== undefined && coluna !== atual.coluna ? "tarefa.movida" : "tarefa.editada",
+      entidade: "tarefa",
+      entidadeId: id,
+      nucleoId: await nucleoDoProjeto(atual.projetoId),
+      ...diferenca(atual, data),
+    })
     return res.json({ success: true, message: "Tarefa atualizada", data: tarefa })
   } catch (error) {
     console.error("Erro ao atualizar tarefa:", error)
@@ -146,7 +168,15 @@ const excluir = async (req, res) => {
   const id = Number(req.params.id)
 
   try {
+    const anterior = await prisma.projetoTarefa.findUnique({ where: { id } })
     await prisma.projetoTarefa.delete({ where: { id } })
+    registrar(req, {
+      acao: "tarefa.excluida",
+      entidade: "tarefa",
+      entidadeId: id,
+      nucleoId: anterior ? await nucleoDoProjeto(anterior.projetoId) : null,
+      antes: anterior,
+    })
     return res.json({ success: true, message: "Tarefa excluída" })
   } catch (error) {
     if (error?.code === "P2025") {

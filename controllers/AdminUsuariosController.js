@@ -1,12 +1,15 @@
 const nodemailer = require("nodemailer")
 const prisma = require("../lib/prismaClient")
+const crypto = require("crypto")
 const bcrypt = require("bcrypt")
 const { normalizarPapel, PAPEIS_VALIDOS, SUPERADMIN } = require("../lib/adminRoles")
 const { normalizeEmail } = require("../lib/email")
 const { validarSenha } = require("../lib/password")
 const { parseDataLocal } = require("../lib/dates")
+const { registrar: auditar, diferenca } = require("../lib/auditoria")
 const { gerarTokenSenha, linkDefinicaoSenha } = require("../lib/resetLink")
-const { recuperacaoSenha } = require("../lib/emailLayout")
+const { recuperacaoSenha, conviteMembro } = require("../lib/emailLayout")
+const { generateUniqueSubdominio } = require("../lib/nucleoSlug")
 require("dotenv").config()
 
 /**
@@ -280,6 +283,13 @@ const enviarResetSenha = async (req, res) => {
       .then(() => console.log(`[adminUsuarios] Link de senha enviado para ${normalizado.email}`))
       .catch((err) => console.error("[adminUsuarios] Falha ao enviar link de senha:", err.message))
 
+    auditar(req, {
+      acao: "usuario.link_senha_enviado",
+      entidade: tipo === "nucleo" ? "nucleo" : tipo === "membro" ? "membro" : "admin",
+      entidadeId: id,
+      nucleoId: tipo === "nucleo" ? id : tipo === "membro" ? registro.nucleoId : null,
+      depois: { email: normalizado.email },
+    })
     return res.json({ success: true, message: `Link enviado para ${normalizado.email}` })
   } catch (error) {
     console.error("Erro ao enviar link de senha:", error)
@@ -330,6 +340,15 @@ const alterarStatus = async (req, res) => {
 
     const virouInativo = status !== STATUS_ATIVO[tipo]
     if (virouInativo) await encerrarSessoes(tipo, id)
+
+    auditar(req, {
+      acao: "usuario.status_alterado",
+      entidade: tipo === "nucleo" ? "nucleo" : tipo === "membro" ? "membro" : "admin",
+      entidadeId: id,
+      nucleoId: tipo === "nucleo" ? id : tipo === "membro" ? conta.registro.nucleoId : null,
+      antes: { status: conta.normalizado.status },
+      depois: { status },
+    })
 
     await prisma.adminLog
       .create({
@@ -412,6 +431,13 @@ const excluir = async (req, res) => {
       })
       .catch((err) => console.error("Erro ao registrar log:", err.message))
 
+    auditar(req, {
+      acao: "usuario.excluido",
+      entidade: tipo === "nucleo" ? "nucleo" : tipo === "membro" ? "membro" : "admin",
+      entidadeId: id,
+      nucleoId: tipo === "nucleo" ? id : tipo === "membro" ? conta.registro.nucleoId : null,
+      antes: conta.registro,
+    })
     return res.json({ success: true, message: `${conta.normalizado.nome} foi excluído` })
   } catch (error) {
     console.error("Erro ao excluir usuário:", error)
@@ -419,7 +445,7 @@ const excluir = async (req, res) => {
   }
 }
 
-const PAPEIS_MEMBRO = ["membro", "coordenador"]
+const PAPEIS_MEMBRO = ["membro", "coordenador", "diretor"]
 
 const textoOuNulo = (v, max) => {
   if (v === undefined) return undefined
@@ -576,6 +602,18 @@ const atualizar = async (req, res) => {
     const mudouAcesso = Boolean(dados[campoEmail] || dados[campoSenha] || dados.role || dados.papel || dados.nucleoId)
     if (mudouAcesso) await encerrarSessoes(tipo, id)
 
+    const { antes: antesCampos, depois: depoisCampos } = diferenca(conta.registro, dados)
+    delete antesCampos[campoSenha]
+    delete depoisCampos[campoSenha]
+    auditar(req, {
+      acao: dados.role || dados.papel ? "usuario.perfil_alterado" : "usuario.editado",
+      entidade: tipo === "nucleo" ? "nucleo" : tipo === "membro" ? "membro" : "admin",
+      entidadeId: id,
+      nucleoId: tipo === "nucleo" ? id : tipo === "membro" ? dados.nucleoId || conta.registro.nucleoId : null,
+      antes: { ...antesCampos, ...(dados[campoSenha] ? { senhaAlterada: false } : {}) },
+      depois: { ...depoisCampos, ...(dados[campoSenha] ? { senhaAlterada: true } : {}) },
+    })
+
     await prisma.adminLog
       .create({
         data: {
@@ -602,4 +640,158 @@ const atualizar = async (req, res) => {
   }
 }
 
-module.exports = { listar, detalhe, enviarResetSenha, alterarStatus, atualizar, excluir }
+/** Envia o link para a pessoa definir a propria senha. Falha de e-mail nao derruba a criacao. */
+function enviarLinkDeSenha({ tipo, id, hash, nome, email, nucleoNome }) {
+  const token = gerarTokenSenha({ type: tipo, id, hash, ttl: "7d" })
+  const link = linkDefinicaoSenha(token)
+
+  if (!process.env.EMAIL_TRANSPORTER || !process.env.PASSWORD_TRANSPORTER) {
+    console.warn("[adminUsuarios] SMTP não configurado — link de senha:", link)
+    return false
+  }
+
+  const conteudo = tipo === "membro" ? conviteMembro({ nome, nucleo: nucleoNome, link }) : recuperacaoSenha({ nome, link })
+  buildTransporter()
+    .sendMail({
+      from: process.env.EMAIL_TRANSPORTER,
+      to: email,
+      subject: conteudo.subject,
+      text: conteudo.text,
+      html: conteudo.html,
+    })
+    .then(() => console.log(`[adminUsuarios] Link de senha enviado para ${email}`))
+    .catch((err) => console.error("[adminUsuarios] Falha ao enviar link de senha:", err.message))
+  return true
+}
+
+/**
+ * POST /admin/usuarios  { tipo, nome, email, senha?, ...campos do tipo }
+ * Cria a conta. Com `senha`, ela ja nasce pronta para entrar; sem `senha`, a
+ * conta e criada e a pessoa recebe por e-mail o link para definir a propria.
+ */
+const criar = async (req, res) => {
+  const corpo = req.body || {}
+  const tipo = String(corpo.tipo || "")
+  if (!TIPOS.includes(tipo)) {
+    return res.status(400).json({ success: false, message: `Tipo deve ser um de: ${TIPOS.join(", ")}` })
+  }
+
+  let dados
+  try {
+    dados = montarAtualizacao(tipo, corpo)
+  } catch (e) {
+    return res.status(400).json({ success: false, message: e.message })
+  }
+
+  const campoEmail = tipo === "nucleo" ? "Email" : "email"
+  const campoNome = tipo === "nucleo" ? "Nome" : "nome"
+  if (!dados[campoNome]) return res.status(400).json({ success: false, message: "Nome é obrigatório" })
+  if (!dados[campoEmail]) return res.status(400).json({ success: false, message: "E-mail é obrigatório" })
+  if (tipo === "nucleo" && !dados.Cidade) return res.status(400).json({ success: false, message: "Cidade é obrigatória" })
+  if (tipo === "membro" && !dados.nucleoId) return res.status(400).json({ success: false, message: "Escolha o núcleo do membro" })
+
+  try {
+    if (await emailEmUso(dados[campoEmail], tipo, 0)) {
+      return res.status(409).json({ success: false, message: "Já existe uma conta com este e-mail" })
+    }
+
+    let hash = null
+    if (corpo.senha) {
+      const problemas = validarSenha(corpo.senha)
+      if (problemas.length) return res.status(400).json({ success: false, message: problemas[0] })
+      hash = await bcrypt.hash(corpo.senha, 12)
+    }
+    // Admin e nucleo exigem senha no banco: sem uma, grava um valor aleatorio
+    // que ninguem conhece; o acesso so abre pelo link enviado por e-mail.
+    const hashGravado = hash || (tipo === "membro" ? null : await bcrypt.hash(crypto.randomBytes(24).toString("hex"), 12))
+
+    let criada
+    let nucleoNome = null
+    try {
+      if (tipo === "admin") {
+        criada = await prisma.admin.create({
+          data: { ...dados, role: dados.role || SUPERADMIN, senha: hashGravado, status: "active" },
+        })
+      } else if (tipo === "nucleo") {
+        const subdominio = await generateUniqueSubdominio({
+          Nome: dados.Nome,
+          Cidade: dados.Cidade,
+          Estado: dados.Estado || "",
+        })
+        criada = await prisma.nucleo.create({
+          data: {
+            ...dados,
+            Descricao: dados.Descricao || `Núcleo ${dados.Nome}`,
+            DataFundacao: dados.DataFundacao || new Date(),
+            Senha: hashGravado,
+            status: "approved",
+            subdominio,
+          },
+        })
+      } else {
+        const nucleo = await prisma.nucleo.findUnique({ where: { id: dados.nucleoId }, select: { Nome: true } })
+        if (!nucleo) return res.status(400).json({ success: false, message: "Núcleo não encontrado" })
+        nucleoNome = nucleo.Nome
+        criada = await prisma.nucleoMembro.create({
+          data: {
+            ...dados,
+            papel: dados.papel || "membro",
+            senha: hashGravado,
+            status: "ativo",
+            consentimento_em: dados.exibir_no_site ? new Date() : null,
+          },
+        })
+      }
+    } catch (e) {
+      if (e.code === "P2002") {
+        return res.status(409).json({ success: false, message: "Já existe uma conta com este e-mail" })
+      }
+      throw e
+    }
+
+    auditar(req, {
+      acao: "usuario.criado",
+      entidade: tipo === "nucleo" ? "nucleo" : tipo === "membro" ? "membro" : "admin",
+      entidadeId: criada.id,
+      nucleoId: tipo === "nucleo" ? criada.id : tipo === "membro" ? criada.nucleoId : null,
+      depois: criada,
+    })
+
+    const emailEnviado = hash
+      ? false
+      : enviarLinkDeSenha({
+          tipo,
+          id: criada.id,
+          hash: hashGravado,
+          nome: dados[campoNome],
+          email: dados[campoEmail],
+          nucleoNome,
+        })
+
+    await prisma.adminLog
+      .create({
+        data: {
+          adminId: req.admin?.id || null,
+          action: "usuario_criado",
+          details: { tipo, id: criada.id, email: dados[campoEmail], comSenha: Boolean(hash) },
+          timestamp: new Date(),
+        },
+      })
+      .catch((err) => console.error("Erro ao registrar log:", err.message))
+
+    return res.status(201).json({
+      success: true,
+      message: hash
+        ? "Usuário criado com a senha informada"
+        : emailEnviado
+          ? `Usuário criado. Enviamos para ${dados[campoEmail]} o link para definir a senha.`
+          : "Usuário criado. O e-mail não está configurado; use “Enviar link de senha” depois.",
+      data: { tipo, id: criada.id },
+    })
+  } catch (error) {
+    console.error("Erro ao criar usuário:", error)
+    return res.status(500).json({ success: false, message: "Erro ao criar usuário" })
+  }
+}
+
+module.exports = { listar, detalhe, enviarResetSenha, alterarStatus, criar, atualizar, excluir }

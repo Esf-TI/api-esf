@@ -2,7 +2,7 @@ const jwt = require("jsonwebtoken")
 require("dotenv").config()
 const moment = require("moment")
 const prisma = require("../lib/prismaClient")
-const { normalizarPapel, papelAtende } = require("../lib/adminRoles")
+const { normalizarPapel, papelAtende, SUPERADMIN } = require("../lib/adminRoles")
 
 const accessTokenSecret = process.env.ACCESS_TOKEN_SECRET || process.env.JWT_SECRET
 const refreshTokenSecret = process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET
@@ -188,6 +188,102 @@ function authenticateAdminOrNucleo(req, res, next) {
   })
 }
 
+
+/** Papéis de membro que gerenciam os projetos do núcleo (além da conta do Núcleo). */
+const PAPEIS_GESTORES = ["diretor", "coordenador"]
+
+/** Id do núcleo a que o ator pertence: a conta do Núcleo ou o núcleo do membro. */
+function nucleoDoAtor(req) {
+  return req.nucleo?.id ?? req.membro?.nucleoId ?? null
+}
+
+/**
+ * Aceita admin, núcleo OU membro. Popula `req.admin`, `req.nucleo` ou
+ * `req.membro` (com papel e núcleo, lidos do banco a cada chamada: uma troca de
+ * papel vale na hora). O handler decide o nível de acesso.
+ */
+function authenticateAtor(req, res, next) {
+  const authHeader = req.headers["authorization"]
+  const token = authHeader && authHeader.split(" ")[1]
+
+  if (!token) {
+    return res.status(401).json({ message: "Token não fornecido" })
+  }
+
+  jwt.verify(token, accessTokenSecret, async (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ message: "Token inválido ou expirado" })
+    }
+
+    try {
+      if (decoded.type === "admin") {
+        const tokenRecord = await prisma.adminToken.findFirst({
+          where: { accessToken: token },
+          select: { admin: { select: { id: true, nome: true, role: true, status: true } } },
+        })
+        if (!tokenRecord) return res.status(403).json({ message: "Token não autorizado para esta ação" })
+        if (tokenRecord.admin?.status !== "active") {
+          return res.status(403).json({ message: "Esta conta de administrador está desativada" })
+        }
+        req.admin = {
+          id: decoded.userId,
+          type: decoded.type,
+          nome: tokenRecord.admin.nome,
+          role: normalizarPapel(tokenRecord.admin.role),
+        }
+      } else if (decoded.type === "membro") {
+        const tokenRecord = await prisma.membroToken.findFirst({
+          where: { accessToken: token },
+          select: { membro: { select: { id: true, nome: true, papel: true, nucleoId: true, status: true } } },
+        })
+        if (!tokenRecord) return res.status(403).json({ message: "Token não autorizado para esta ação" })
+        if (tokenRecord.membro?.status !== "ativo") {
+          return res.status(403).json({ message: "Esta conta de membro está inativa" })
+        }
+        req.membro = {
+          id: decoded.userId,
+          type: decoded.type,
+          nome: tokenRecord.membro.nome,
+          papel: tokenRecord.membro.papel,
+          nucleoId: tokenRecord.membro.nucleoId,
+        }
+      } else {
+        const tokenRecord = await prisma.nucleoToken.findFirst({
+          where: { accessToken: token },
+          select: { nucleo: { select: { id: true, Nome: true } } },
+        })
+        if (!tokenRecord) return res.status(403).json({ message: "Token não autorizado para esta ação" })
+        req.nucleo = { id: decoded.userId, type: decoded.type, nome: tokenRecord.nucleo?.Nome }
+      }
+
+      req.user = decoded
+      next()
+    } catch (error) {
+      return res.status(500).json({ message: "Erro ao validar o token" })
+    }
+  })
+}
+
+/**
+ * Só a conta do Núcleo, Diretor, Coordenador (do núcleo) ou superadmin mexem em
+ * cards de projeto. Vai depois de `authenticateAtor`.
+ */
+function exigirPapelDeProjeto(req, res, next) {
+  const ehGestor =
+    (req.admin && req.admin.role === SUPERADMIN) ||
+    Boolean(req.nucleo) ||
+    (req.membro && PAPEIS_GESTORES.includes(req.membro.papel))
+
+  if (!ehGestor) {
+    return res.status(403).json({
+      success: false,
+      message: "Seu perfil não pode criar ou alterar projetos. Peça ao Diretor ou ao Coordenador.",
+      code: "PAPEL_INSUFICIENTE",
+    })
+  }
+  next()
+}
+
 /**
  * Impede que um núcleo altere os dados de OUTRO núcleo (IDOR): o alvo vem de
  * `req.params.id`, então sem esta checagem qualquer núcleo logado editava
@@ -197,7 +293,8 @@ function ensureNucleoSelf(req, res, next) {
   if (req.admin) return next()
 
   const targetId = Number(req.params.id)
-  if (!req.nucleo || !Number.isFinite(targetId) || req.nucleo.id !== targetId) {
+  const meuNucleo = nucleoDoAtor(req)
+  if (meuNucleo === null || !Number.isFinite(targetId) || meuNucleo !== targetId) {
     return res.status(403).json({ success: false, message: "Você só pode alterar os dados do seu próprio núcleo" })
   }
 
@@ -205,10 +302,24 @@ function ensureNucleoSelf(req, res, next) {
 }
 
 /**
- * Garante que o projeto alvo pertence ao núcleo autenticado. Admin passa direto.
+ * Admin só opera projetos e tarefas de núcleos quando é superadmin: os papéis
+ * `conteudo`, `materiais` e `coordenador_nacional` não têm essa permissão (o
+ * Coordenador Nacional consulta pela visão nacional, somente leitura).
+ */
+function adminGerenciaNucleos(req, res, next) {
+  if (req.admin.role === SUPERADMIN) return next()
+  return res.status(403).json({
+    success: false,
+    message: "Seu usuário não tem permissão para esta área",
+    code: "PAPEL_INSUFICIENTE",
+  })
+}
+
+/**
+ * Garante que o projeto alvo pertence ao núcleo autenticado. Superadmin passa direto.
  */
 async function ensureProjetoDoNucleo(req, res, next) {
-  if (req.admin) return next()
+  if (req.admin) return adminGerenciaNucleos(req, res, next)
 
   const projetoId = Number(req.params.id)
   if (!Number.isFinite(projetoId)) {
@@ -223,7 +334,8 @@ async function ensureProjetoDoNucleo(req, res, next) {
 
     if (!projeto) return res.status(404).json({ success: false, message: "Projeto não encontrado" })
 
-    if (!req.nucleo || projeto.NucleoResponsavel !== req.nucleo.id) {
+    const meuNucleo = nucleoDoAtor(req)
+    if (meuNucleo === null || projeto.NucleoResponsavel !== meuNucleo) {
       return res.status(403).json({ success: false, message: "Este projeto pertence a outro núcleo" })
     }
 
@@ -306,7 +418,7 @@ async function ensureMembroDoNucleo(req, res, next) {
  * qualquer nucleo mexer no quadro de outro. Admin passa direto.
  */
 async function ensureTarefaDoNucleo(req, res, next) {
-  if (req.admin) return next()
+  if (req.admin) return adminGerenciaNucleos(req, res, next)
 
   const tarefaId = Number(req.params.id)
   if (!Number.isFinite(tarefaId)) {
@@ -321,7 +433,8 @@ async function ensureTarefaDoNucleo(req, res, next) {
 
     if (!tarefa) return res.status(404).json({ success: false, message: "Tarefa não encontrada" })
 
-    if (!req.nucleo || tarefa.projeto?.NucleoResponsavel !== req.nucleo.id) {
+    const meuNucleo = nucleoDoAtor(req)
+    if (meuNucleo === null || tarefa.projeto?.NucleoResponsavel !== meuNucleo) {
       return res.status(403).json({ success: false, message: "Esta tarefa pertence a outro núcleo" })
     }
 
@@ -385,6 +498,9 @@ module.exports = {
   authenticateAdmin,
   authenticateNucleo,
   authenticateAdminOrNucleo,
+  authenticateAtor,
+  exigirPapelDeProjeto,
+  nucleoDoAtor,
   authenticateMembro,
   authenticateOpcional,
   requireAdminRole,

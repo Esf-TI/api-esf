@@ -6,7 +6,7 @@ const multer = require("multer")
 const uploadProjects = require("../middlewares/uploadsProjects")
 const uploadImage = require("../middlewares/storageUpload")
 const { publicCache } = require("../middlewares/cacheControl")
-const { authenticateAdminOrNucleo, ensureProjetoDoNucleo } = require("../middlewares/authFunctions")
+const { authenticateAdminOrNucleo, authenticateAtor, exigirPapelDeProjeto, ensureProjetoDoNucleo } = require("../middlewares/authFunctions")
 const { permitirPrimeiroProjetoOuAutenticar } = require("../middlewares/primeiroProjeto")
 const supabase = require("../lib/supabaseClient")
 const { optimizeImage } = require("../lib/imageOptimizer")
@@ -83,18 +83,18 @@ router.get("/projetos/nucleos/:nucleoId", publicCache(60), ProjetcsControllers.r
 router.get("/projetos/:id", publicCache(60), ProjetcsControllers.returnProjectById)
 
 // ALTERAR TODOS OS CAMPOS (com fotos via Supabase Storage)
-router.put("/projetos/:id", authenticateAdminOrNucleo, ensureProjetoDoNucleo, multiUpload, uploadProjects, ProjetcsControllers.editProjectById)
+router.put("/projetos/:id", authenticateAtor, exigirPapelDeProjeto, ensureProjetoDoNucleo, multiUpload, uploadProjects, ProjetcsControllers.editProjectById)
 
 // ALTERAR TODOS OS CAMPOS sem upload
-router.put("/projetosAlterar/:id", authenticateAdminOrNucleo, ensureProjetoDoNucleo, ProjetcsControllers.editProjectByIdWithout)
+router.put("/projetosAlterar/:id", authenticateAtor, exigirPapelDeProjeto, ensureProjetoDoNucleo, ProjetcsControllers.editProjectByIdWithout)
 
 // ALTERAR SÓ UM CAMPO ESPECÍFICO (sem arquivo)
-router.patch("/projetosedit/:id", authenticateAdminOrNucleo, ensureProjetoDoNucleo, ProjetcsControllers.patchProject)
+router.patch("/projetosedit/:id", authenticateAtor, exigirPapelDeProjeto, ensureProjetoDoNucleo, ProjetcsControllers.patchProject)
 
 // ATUALIZAR FOTO DE CAPA via Supabase Storage (bucket: projetos)
-router.patch("/projetoPhoto/:id", authenticateAdminOrNucleo, ensureProjetoDoNucleo, singleUpload, (req, _res, next) => { req.uploadBucket = "projetos"; next() }, uploadImage, ProjetcsControllers.updatePhotoCapaProjeto)
+router.patch("/projetoPhoto/:id", authenticateAtor, exigirPapelDeProjeto, ensureProjetoDoNucleo, singleUpload, (req, _res, next) => { req.uploadBucket = "projetos"; next() }, uploadImage, ProjetcsControllers.updatePhotoCapaProjeto)
 
 // APAGAR O PROJETO
-router.delete("/projetos/:id", authenticateAdminOrNucleo, ensureProjetoDoNucleo, ProjetcsControllers.deleteProjectById)
+router.delete("/projetos/:id", authenticateAtor, exigirPapelDeProjeto, ensureProjetoDoNucleo, ProjetcsControllers.deleteProjectById)
 
 module.exports = router
