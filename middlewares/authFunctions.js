@@ -234,11 +234,18 @@ function authenticateAtor(req, res, next) {
       } else if (decoded.type === "membro") {
         const tokenRecord = await prisma.membroToken.findFirst({
           where: { accessToken: token },
-          select: { membro: { select: { id: true, nome: true, papel: true, nucleoId: true, status: true } } },
+          select: {
+            membro: {
+              select: { id: true, nome: true, papel: true, nucleoId: true, status: true, nucleo: { select: { status: true } } },
+            },
+          },
         })
         if (!tokenRecord) return res.status(403).json({ message: "Token não autorizado para esta ação" })
         if (tokenRecord.membro?.status !== "ativo") {
           return res.status(403).json({ message: "Esta conta de membro está inativa" })
+        }
+        if (tokenRecord.membro?.nucleo?.status !== "approved") {
+          return res.status(403).json({ message: "O núcleo desta conta está desativado" })
         }
         req.membro = {
           id: decoded.userId,
@@ -250,9 +257,12 @@ function authenticateAtor(req, res, next) {
       } else {
         const tokenRecord = await prisma.nucleoToken.findFirst({
           where: { accessToken: token },
-          select: { nucleo: { select: { id: true, Nome: true } } },
+          select: { nucleo: { select: { id: true, Nome: true, status: true } } },
         })
         if (!tokenRecord) return res.status(403).json({ message: "Token não autorizado para esta ação" })
+        if (tokenRecord.nucleo?.status !== "approved") {
+          return res.status(403).json({ message: "Este núcleo está desativado" })
+        }
         req.nucleo = { id: decoded.userId, type: decoded.type, nome: tokenRecord.nucleo?.Nome }
       }
 

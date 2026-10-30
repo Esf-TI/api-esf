@@ -245,6 +245,9 @@ const LoginNucleo = async (req, res) => {
       return res.status(401).send("Senha incorreta")
     }
 
+    if (nucleo.status === "inactive") {
+      return res.status(409).send("Núcleo desativado. Fale com a coordenação nacional.")
+    }
     if (nucleo.status !== "approved") {
       return res.status(409).send("Nucleo nao aprovado")
     }
@@ -313,6 +316,9 @@ const GetAllNucleos = async (req, res) => {
 
     const where = {}
     if (status) where.status = status
+    // Núcleo desativado some do site; só o admin autenticado ainda o enxerga.
+    if (!req.admin && status !== "inactive") where.NOT = { status: "inactive" }
+    if (!req.admin && status === "inactive") where.status = "__nenhum__"
     if (cidade) where.Cidade = { contains: cidade, mode: "insensitive" }
     if (search) {
       where.OR = [
@@ -349,6 +355,8 @@ const GetNucleoById = async (req, res) => {
     // Admins autenticados recebem campos de contato/moderação; o público, não.
     const nucleo = await resolveNucleoFromParam(req.params.id, { includePrivate: Boolean(req.admin) })
     if (!nucleo) return res.status(404).send("Núcleo não encontrado")
+    // Núcleo desativado não tem mais página pública; os dados continuam guardados.
+    if (nucleo.status === "inactive" && !req.admin) return res.status(404).send("Núcleo não encontrado")
     const slug = buildNucleoSlug(nucleo)
     return res.status(200).json({ ...nucleo, slug })
   } catch (error) {
@@ -369,8 +377,8 @@ const updateNucleoStatus = async (req, res) => {
   // pelo painel admin e pelos cards do front (evita status órfão "Indefinido").
   const statusNormalizado = novoStatus === "reproved" ? "rejected" : novoStatus
 
-  if (!["approved", "rejected", "pending"].includes(statusNormalizado)) {
-    return res.status(400).json({ success: false, message: "Status deve ser: approved, rejected ou pending" })
+  if (!["approved", "rejected", "pending", "inactive"].includes(statusNormalizado)) {
+    return res.status(400).json({ success: false, message: "Status deve ser: approved, rejected, pending ou inactive" })
   }
 
   try {
@@ -385,7 +393,8 @@ const updateNucleoStatus = async (req, res) => {
       },
     })
 
-    res.json({ success: true, message: `Núcleo ${nucleo.Nome} ${statusNormalizado === "approved" ? "aprovado" : "reprovado"} com sucesso`, data: { nucleoId, nucleoNome: nucleo.Nome, status: statusNormalizado } })
+    if (statusNormalizado !== "approved") await prisma.nucleoToken.deleteMany({ where: { nucleoId } })
+    res.json({ success: true, message: `Núcleo ${nucleo.Nome} ${{ approved: "aprovado", inactive: "desativado", pending: "movido para pendente" }[statusNormalizado] || "reprovado"} com sucesso`, data: { nucleoId, nucleoNome: nucleo.Nome, status: statusNormalizado } })
   } catch (error) {
     if (error.code === "P2025") return res.status(404).json({ success: false, message: "Núcleo não encontrado" })
     console.error("Error updating nucleo status:", error)

@@ -242,9 +242,9 @@ const updateNucleoStatus = async (req, res) => {
     const nucleoId = Number(req.params.id)
     const { status, reason } = req.body
 
-    const validStatuses = ["pending", "approved", "rejected"]
+    const validStatuses = ["pending", "approved", "rejected", "inactive"]
     if (!validStatuses.includes(status)) {
-      return res.status(400).json({ success: false, message: "Status inválido. Use: pending, approved, rejected" })
+      return res.status(400).json({ success: false, message: "Status inválido. Use: pending, approved, rejected, inactive" })
     }
 
     // Persiste a moderação: `rejection_reason`, `approved_by` e `approved_at`
@@ -261,6 +261,9 @@ const updateNucleoStatus = async (req, res) => {
       },
     })
 
+    // Núcleo que deixa de estar aprovado perde as sessões abertas.
+    if (status !== "approved") await prisma.nucleoToken.deleteMany({ where: { nucleoId } })
+
     require("../lib/auditoria").registrar(req, {
       acao: "nucleo.status_alterado",
       entidade: "nucleo",
@@ -273,7 +276,7 @@ const updateNucleoStatus = async (req, res) => {
 
     res.json({
       success: true,
-      message: `Núcleo ${status === "approved" ? "aprovado" : status === "rejected" ? "reprovado" : "atualizado"} com sucesso`,
+      message: `Núcleo ${status === "approved" ? "aprovado" : status === "rejected" ? "reprovado" : status === "inactive" ? "desativado" : "atualizado"} com sucesso`,
       data: { nucleoId, status },
     })
   } catch (error) {

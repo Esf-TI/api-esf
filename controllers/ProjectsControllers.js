@@ -125,7 +125,11 @@ const createProjectDentro = async (req, res) => {
 
 const returnProjects = async (req, res) => {
   try {
-    const projetos = await prisma.projeto.findMany({ orderBy: { id: "desc" } })
+    // Projeto de núcleo desativado não aparece no site (os dados são mantidos).
+    const projetos = await prisma.projeto.findMany({
+      where: { NOT: { nucleo: { status: "inactive" } } },
+      orderBy: { id: "desc" },
+    })
 
     const projetosPorArea = {}
     projetos.forEach((p) => {
@@ -148,6 +152,11 @@ const returnProjectsNucleo = async (req, res) => {
   try {
     const nucleoId = await resolveNucleoIdFromParam(req.params.nucleoId)
     if (!nucleoId) {
+      return res.status(404).send("Núcleo não encontrado.")
+    }
+
+    const dono = await prisma.nucleo.findUnique({ where: { id: nucleoId }, select: { status: true } })
+    if (dono?.status === "inactive") {
       return res.status(404).send("Núcleo não encontrado.")
     }
 

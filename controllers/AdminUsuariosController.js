@@ -23,7 +23,7 @@ const TIPOS = ["admin", "nucleo", "membro"]
 /** Cada tipo tem seu proprio vocabulario de status; nao da para unificar sem mentir. */
 const STATUS_VALIDOS = {
   admin: ["active", "inactive"],
-  nucleo: ["pending", "approved", "reproved"],
+  nucleo: ["pending", "approved", "reproved", "inactive"],
   membro: ["ativo", "inativo", "desligado"],
 }
 
