@@ -138,6 +138,7 @@ model Nucleo {
   tokens     NucleoToken[]
   membros    NucleoMembro[]
   atividades NucleoAtividade[]
+  quadros    Quadro[]
 
   @@index([status])
   @@index([Estado])
@@ -549,4 +550,49 @@ model CardNacional {
   @@index([coluna])
   @@index([nucleo_id])
   @@map("cards_nacionais")
+}
+
+/// Quadro de desenho (estilo tldraw/draw.io). `cena` e o JSON do Excalidraw.
+/// Uma pessoa edita por vez: `bloqueio_*` guarda a reserva, que expira sozinha.
+model Quadro {
+  id             Int       @id @default(autoincrement())
+  titulo         String    @db.VarChar(255)
+  /// nucleo | nacional
+  escopo         String    @db.VarChar(20)
+  nucleo_id      Int?
+  cena           Json
+  miniatura      String?   @db.Text
+  autor_tipo     String    @db.VarChar(20)
+  autor_id       Int
+  autor_nome     String?   @db.VarChar(255)
+  versao         Int       @default(1)
+  bloqueio_ator  String?   @db.VarChar(40)
+  bloqueio_nome  String?   @db.VarChar(255)
+  bloqueio_ate   DateTime?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  nucleo   Nucleo?         @relation(fields: [nucleo_id], references: [id], onDelete: Cascade)
+  versoes  QuadroVersao[]
+
+  @@index([nucleo_id])
+  @@index([escopo])
+  @@index([updated_at])
+  @@map("quadros")
+}
+
+/// Instantaneos do quadro (os 20 mais recentes) para recuperar um estado anterior.
+model QuadroVersao {
+  id         Int      @id @default(autoincrement())
+  quadro_id  Int
+  versao     Int
+  cena       Json
+  autor_nome String?  @db.VarChar(255)
+  created_at DateTime @default(now())
+
+  quadro Quadro @relation(fields: [quadro_id], references: [id], onDelete: Cascade)
+
+  @@unique([quadro_id, versao])
+  @@index([quadro_id])
+  @@map("quadro_versoes")
 }
