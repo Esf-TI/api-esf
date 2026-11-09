@@ -70,7 +70,7 @@ function authenticateAdmin(req, res, next) {
       // seguia entrando enquanto o token dela não expirasse.
       const tokenRecord = await prisma.adminToken.findFirst({
         where: { accessToken: token },
-        select: { admin: { select: { id: true, role: true, status: true } } },
+        select: { admin: { select: { id: true, nome: true, email: true, role: true, status: true } } },
       })
       if (!tokenRecord) {
         return res.status(403).json({ message: "Token não autorizado para esta ação" })
@@ -80,7 +80,13 @@ function authenticateAdmin(req, res, next) {
         return res.status(403).json({ message: "Esta conta de administrador está desativada" })
       }
 
-      req.admin = { id: decoded.userId, type: decoded.type, role: normalizarPapel(tokenRecord.admin.role) }
+      req.admin = {
+        id: decoded.userId,
+        type: decoded.type,
+        nome: tokenRecord.admin.nome,
+        email: tokenRecord.admin.email,
+        role: normalizarPapel(tokenRecord.admin.role),
+      }
       req.user = decoded
       next()
     } catch (error) {
@@ -163,13 +169,19 @@ function authenticateAdminOrNucleo(req, res, next) {
       if (decoded.type === "admin") {
         const tokenRecord = await prisma.adminToken.findFirst({
           where: { accessToken: token },
-          select: { admin: { select: { id: true, role: true, status: true } } },
+          select: { admin: { select: { id: true, nome: true, email: true, role: true, status: true } } },
         })
         if (!tokenRecord) return res.status(403).json({ message: "Token não autorizado para esta ação" })
         if (tokenRecord.admin?.status !== "active") {
           return res.status(403).json({ message: "Esta conta de administrador está desativada" })
         }
-        req.admin = { id: decoded.userId, type: decoded.type, role: normalizarPapel(tokenRecord.admin.role) }
+        req.admin = {
+        id: decoded.userId,
+        type: decoded.type,
+        nome: tokenRecord.admin.nome,
+        email: tokenRecord.admin.email,
+        role: normalizarPapel(tokenRecord.admin.role),
+      }
       } else if (decoded.type === "membro") {
         // Membro nao gerencia o nucleo: recusa com mensagem clara em vez de
         // cair na busca por nucleoToken e devolver um 403 generico.
@@ -219,7 +231,7 @@ function authenticateAtor(req, res, next) {
       if (decoded.type === "admin") {
         const tokenRecord = await prisma.adminToken.findFirst({
           where: { accessToken: token },
-          select: { admin: { select: { id: true, nome: true, role: true, status: true } } },
+          select: { admin: { select: { id: true, nome: true, email: true, role: true, status: true } } },
         })
         if (!tokenRecord) return res.status(403).json({ message: "Token não autorizado para esta ação" })
         if (tokenRecord.admin?.status !== "active") {
@@ -229,6 +241,7 @@ function authenticateAtor(req, res, next) {
           id: decoded.userId,
           type: decoded.type,
           nome: tokenRecord.admin.nome,
+          email: tokenRecord.admin.email,
           role: normalizarPapel(tokenRecord.admin.role),
         }
       } else if (decoded.type === "membro") {
@@ -475,10 +488,16 @@ function authenticateOpcional(req, res, next) {
       if (decoded.type === "admin") {
         const tokenRecord = await prisma.adminToken.findFirst({
           where: { accessToken: token },
-          select: { admin: { select: { id: true, role: true, status: true } } },
+          select: { admin: { select: { id: true, nome: true, email: true, role: true, status: true } } },
         })
         if (tokenRecord && tokenRecord.admin?.status === "active") {
-          req.admin = { id: decoded.userId, type: decoded.type, role: normalizarPapel(tokenRecord.admin.role) }
+          req.admin = {
+        id: decoded.userId,
+        type: decoded.type,
+        nome: tokenRecord.admin.nome,
+        email: tokenRecord.admin.email,
+        role: normalizarPapel(tokenRecord.admin.role),
+      }
           req.user = decoded
         }
       } else if (decoded.type === "membro") {
