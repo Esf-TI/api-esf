@@ -184,8 +184,8 @@ model Projeto {
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
 
-  nucleo                 Nucleo?           @relation(fields: [NucleoResponsavel], references: [id], onDelete: Cascade)
-  tarefas                ProjetoTarefa[]
+  nucleo  Nucleo?         @relation(fields: [NucleoResponsavel], references: [id], onDelete: Cascade)
+  tarefas ProjetoTarefa[]
 
   @@index([NucleoResponsavel])
   @@index([status])
@@ -555,25 +555,25 @@ model CardNacional {
 /// Quadro de desenho (estilo tldraw/draw.io). `cena` e o JSON do Excalidraw.
 /// Uma pessoa edita por vez: `bloqueio_*` guarda a reserva, que expira sozinha.
 model Quadro {
-  id             Int       @id @default(autoincrement())
-  titulo         String    @db.VarChar(255)
+  id            Int       @id @default(autoincrement())
+  titulo        String    @db.VarChar(255)
   /// nucleo | nacional
-  escopo         String    @db.VarChar(20)
-  nucleo_id      Int?
-  cena           Json
-  miniatura      String?   @db.Text
-  autor_tipo     String    @db.VarChar(20)
-  autor_id       Int
-  autor_nome     String?   @db.VarChar(255)
-  versao         Int       @default(1)
-  bloqueio_ator  String?   @db.VarChar(40)
-  bloqueio_nome  String?   @db.VarChar(255)
-  bloqueio_ate   DateTime?
-  created_at     DateTime  @default(now())
-  updated_at     DateTime  @updatedAt
+  escopo        String    @db.VarChar(20)
+  nucleo_id     Int?
+  cena          Json
+  miniatura     String?   @db.Text
+  autor_tipo    String    @db.VarChar(20)
+  autor_id      Int
+  autor_nome    String?   @db.VarChar(255)
+  versao        Int       @default(1)
+  bloqueio_ator String?   @db.VarChar(40)
+  bloqueio_nome String?   @db.VarChar(255)
+  bloqueio_ate  DateTime?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
 
-  nucleo   Nucleo?         @relation(fields: [nucleo_id], references: [id], onDelete: Cascade)
-  versoes  QuadroVersao[]
+  nucleo  Nucleo?        @relation(fields: [nucleo_id], references: [id], onDelete: Cascade)
+  versoes QuadroVersao[]
 
   @@index([nucleo_id])
   @@index([escopo])
@@ -595,4 +595,101 @@ model QuadroVersao {
   @@unique([quadro_id, versao])
   @@index([quadro_id])
   @@map("quadro_versoes")
+}
+
+/// Area de Treinamentos: a gestao nacional cadastra, todos os perfis logados assistem.
+model Treinamento {
+  id           Int      @id @default(autoincrement())
+  titulo       String   @db.VarChar(255)
+  descricao    String?  @db.Text
+  categoria    String   @default("Geral") @db.VarChar(100)
+  capa_url     String?  @db.VarChar(500)
+  /// todos | nacional | nucleos
+  visibilidade String   @default("todos") @db.VarChar(20)
+  /// rascunho | publicado
+  status       String   @default("rascunho") @db.VarChar(20)
+  ordem        Int      @default(0)
+  autor_tipo   String   @db.VarChar(20)
+  autor_id     Int
+  autor_nome   String?  @db.VarChar(255)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  aulas TreinamentoAula[]
+
+  @@index([status])
+  @@index([categoria])
+  @@map("treinamentos")
+}
+
+model TreinamentoAula {
+  id             Int      @id @default(autoincrement())
+  treinamento_id Int
+  titulo         String   @db.VarChar(255)
+  /// HTML ja limpo no servidor (sanitize-html)
+  texto          String?  @db.Text
+  video_url      String?  @db.VarChar(255)
+  /// ID de 11 caracteres do YouTube; o front monta a URL de incorporacao
+  video_id       String?  @db.VarChar(20)
+  ordem          Int      @default(0)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  treinamento Treinamento            @relation(fields: [treinamento_id], references: [id], onDelete: Cascade)
+  anexos      TreinamentoAnexo[]
+  progresso   TreinamentoProgresso[]
+
+  @@index([treinamento_id])
+  @@map("treinamento_aulas")
+}
+
+model TreinamentoAnexo {
+  id         Int      @id @default(autoincrement())
+  aula_id    Int
+  nome       String   @db.VarChar(255)
+  url        String   @db.VarChar(500)
+  tamanho    Int?
+  tipo       String?  @db.VarChar(120)
+  ordem      Int      @default(0)
+  created_at DateTime @default(now())
+
+  aula TreinamentoAula @relation(fields: [aula_id], references: [id], onDelete: Cascade)
+
+  @@index([aula_id])
+  @@map("treinamento_anexos")
+}
+
+model TreinamentoProgresso {
+  id           Int      @id @default(autoincrement())
+  aula_id      Int
+  ator_tipo    String   @db.VarChar(20)
+  ator_id      Int
+  concluida_em DateTime @default(now())
+
+  aula TreinamentoAula @relation(fields: [aula_id], references: [id], onDelete: Cascade)
+
+  @@unique([aula_id, ator_tipo, ator_id])
+  @@index([ator_tipo, ator_id])
+  @@map("treinamento_progresso")
+}
+
+/// Pedido de um novo treinamento, feito por qualquer perfil logado.
+model TreinamentoPedido {
+  id             Int       @id @default(autoincrement())
+  titulo         String    @db.VarChar(255)
+  descricao      String?   @db.Text
+  autor_tipo     String    @db.VarChar(20)
+  autor_id       Int
+  autor_nome     String?   @db.VarChar(255)
+  /// aberto | em_analise | atendido | recusado
+  status         String    @default("aberto") @db.VarChar(20)
+  resposta       String?   @db.Text
+  respondido_por String?   @db.VarChar(255)
+  respondido_em  DateTime?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  @@index([status])
+  @@index([autor_tipo, autor_id])
+  @@map("treinamento_pedidos")
 }
